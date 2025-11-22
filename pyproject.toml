@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "sleep_monitoring"
+version = "0.1.0"
+description = "Sleep monitoring tools for Wellue SleepU data"
+authors = [{name = "ethermious"}]
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pandas",
+    "plotly",
+    "dash",
+]
+
+[tool.setuptools]
+packages = ["sleep_monitoring", "sleep_monitoring.dash_app"]
