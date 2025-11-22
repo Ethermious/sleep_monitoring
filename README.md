@@ -1,65 +1,53 @@
-# viatom-ble
-Python script to read sensor values over BLE from Viatom wearable ring oxygen (SpO2) monitors.
+# Sleep Monitoring
 
-Reads values once every 2 second and logs to console or log file. Also publishes values to an MQTT broker if so configured.
+Tools for collecting, storing, and reviewing Wellue SleepU oximeter data on a Raspberry Pi.
 
-## Compatability
-Tested against a Viatom model PO3 (Wellue KidsO2) during development.
+## Overview
+- `sleep_monitoring.logger_service`: systemd-friendly logger that streams verbose output from `viatom-ble.py`, stores samples in SQLite, and writes per-sleep-date CSV backups.
+- `sleep_monitoring.data_io`: database access helpers and the reusable `compute_sleep_date` rule.
+- `sleep_monitoring.metrics`: desaturation detection and summary metrics.
+- `sleep_monitoring.dash_app`: Dash UI with Live and Review tabs.
+- `scripts/migrate_csv_to_db.py`: import existing CSV logs into SQLite.
 
-Should be compatible with all Viatom ring oxygen monitors inluding models PO1, PO2 (Wellue O2Ring), PO3, PO4 and PO1B.
+## Paths and configuration
+Defaults are centralized in `sleep_monitoring/config.py`:
+- Database: `/home/ethermious/sleepu_logs/sleepu.db`
+- CSV backups: `/home/ethermious/sleepu_logs`
+- External BLE script: `/home/ethermious/repos/viatom-ble/viatom-ble.py`
+- Time zone for `sleep_date` mapping: `America/Chicago`
 
-## Setup
-Install BluePy for BLE and Paho for MQTT client
+## Sleep date mapping
+All timestamps are stored in UTC and mapped to a `sleep_date` using local time:
+- If local time-of-day is before 12:01 pm, the sample belongs to the previous date.
+- Otherwise, it belongs to the current local date.
 
+## Running the logger
+```bash
+python -m sleep_monitoring.logger_service
 ```
-sudo pip install bluepy
-sudo pip install paho-mqtt
-```
+The service launches `viatom-ble.py -v -c`, appends rows to SQLite, and writes `sleepu_YYYYMMDD.csv` alongside the database.
 
-Scan while wearing the device to determine it's BLE address.
-
-*Note: Ensure the device is not connected to any other monitor (ie the mobile app) before scanning.*
-
-```
-sudo python viatom-ble.py -s
-```
-
-Look for a device with `Complete Local Name` that is associated with the ring monitor device and note its `Device` address (six colon-delimited octets, eg aa:bb:cc:11:22:33)
-
-Edit the python script `viatom-ble.py` and enter the BLE address where the `ble_address` variable is initialized.
-
-Optionally also configure the MQTT client by enering values for the `mqtt_*` variables where they are initialized.
-
-Test BLE connectivity while wearing the device.
-
-*Note: Warnings and exceptions from the MQTT client can be ignored if it has not been configured.*
-
-```
-python viatom-ble.py -v -c
-```
-
-## Installation
-Edit the service definition file `viatom-ble.service` and update the command in `ExecStart` to reflect the correct path to the python script.
-
-Install the service definition file:
-
-```
-sudo cp viatom-ble.service /lib/systemd/system/.
+A sample systemd unit is provided at `systemd/sleep_monitoring_logger.service`. Update paths if needed, then install with:
+```bash
+sudo cp systemd/sleep_monitoring_logger.service /etc/systemd/system/
 sudo systemctl daemon-reload
+sudo systemctl enable --now sleep_monitoring_logger
 ```
 
-To start the service:
-
+## Dash application
+Run the Dash app for live monitoring and review:
+```bash
+python -m sleep_monitoring.dash_app.app
 ```
-sudo systemctl start viatom-ble
+It exposes a Live tab for the current night and a Review tab for historical sessions.
+
+## Migrating historical CSV logs
+Import existing CSV files from the backup directory into SQLite:
+```bash
+python scripts/migrate_csv_to_db.py --directory /home/ethermious/sleepu_logs
 ```
 
-To automatically start the service on boot:
-
-```
-sudo systemctl enable viatom-ble
-```
-
-## TODO
-Make the python script compatible with including as a module in other scripts.
-
+## Development
+- Python 3.11
+- Dependencies defined in `pyproject.toml`
+- Code is organized as a Python package inside the repository.
