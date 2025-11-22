@@ -1,0 +1,15 @@
+[Unit]
+Description=SleepU BLE CSV logger using viatom-ble
+After=bluetooth.service network.target
+Wants=bluetooth.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/ethermious/repos/viatom-ble
+ExecStart=/home/ethermious/repos/viatom-ble/venv/bin/python /home/ethermious/repos/viatom-ble/sleepu_logger.py
+Restart=on-failure
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
