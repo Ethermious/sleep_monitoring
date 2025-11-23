@@ -23,18 +23,26 @@ def migrate_file(path: Path, user_id: int) -> None:
         raise ValueError(f"Missing columns {missing} in {path}")
 
     cache: dict[str, set[datetime]] = {}
+    total_rows = len(df)
 
-    for _, row in df.iterrows():
+    for idx, (_, row) in enumerate(df.iterrows(), start=1):
         ts = datetime.fromisoformat(str(row["timestamp"])).replace(tzinfo=timezone.utc)
         sleep_date = data_io.compute_sleep_date(ts)
         date_key = sleep_date.isoformat()
+
         if date_key not in cache:
             existing = data_io.load_session_samples(user_id, sleep_date)
             cache[date_key] = set(existing["timestamp_utc"]) if not existing.empty else set()
+
         if ts in cache[date_key]:
+            # already in DB for this date; skip
             continue
 
-        session_id = data_io.get_or_create_session_id(user_id, sleep_date, start_time_utc=ts)
+        session_id = data_io.get_or_create_session_id(
+            user_id,
+            sleep_date,
+            start_time_utc=ts,
+        )
         data_io.insert_sample(
             session_id=session_id,
             timestamp_utc=ts,
@@ -45,6 +53,11 @@ def migrate_file(path: Path, user_id: int) -> None:
             battery=int(row.get("battery")) if not pd.isna(row.get("battery")) else None,
         )
         cache[date_key].add(ts)
+
+        # Progress every 500 rows (adjust as needed)
+        if idx % 500 == 0 or idx == total_rows:
+            print(f"[migrate] {path.name}: {idx}/{total_rows} rows processed")
+
     print(f"[migrate] Completed {path}")
 
 

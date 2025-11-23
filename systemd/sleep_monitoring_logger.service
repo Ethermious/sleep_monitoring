@@ -1,14 +1,28 @@
 [Unit]
 Description=Sleep Monitoring Logger
-After=network.target
+After=network-online.target bluetooth.target
+Wants=network-online.target
 
 [Service]
 Type=simple
-ExecStart=/usr/bin/python3 -m sleep_monitoring.logger_service
-WorkingDirectory=/home/ethermious/repos/sleep_monitoring
-Restart=always
+
+# Run as your normal user so HOME and permissions are correct
 User=ethermious
-Environment=PYTHONUNBUFFERED=1
+Group=ethermious
+
+# Where the repo lives
+WorkingDirectory=/home/ethermious/repos/sleep_monitoring
+
+# Environment (optional but handy)
+Environment="PYTHONUNBUFFERED=1"
+Environment="SLEEPU_DB_PATH=/home/ethermious/sleepu_logs/sleepu.db"
+
+# Use the venv Python that you used manually
+ExecStart=/home/ethermious/repos/sleep_monitoring/venv/bin/python -m sleep_monitoring.logger_service
+
+# Automatically restart on failure
+Restart=on-failure
+RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
