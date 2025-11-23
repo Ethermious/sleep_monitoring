@@ -6,9 +6,9 @@ import datetime as dt
 from pathlib import Path
 
 # Paths for your setup
-REPO_DIR = Path("/home/ethermious/repos/viatom-ble")
+REPO_DIR = Path("/home/ethermious/repos/sleep_monitoring")
 VENV_PY = REPO_DIR / "venv" / "bin" / "python"
-SCRIPT = REPO_DIR / "viatom-ble.py"
+SCRIPT = REPO_DIR / "sleepu" / "ble" / "viatom-ble.py"
 
 LOG_DIR = Path("/home/ethermious/sleepu_logs")
 LOG_DIR.mkdir(parents=True, exist_ok=True)
