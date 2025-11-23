@@ -13,7 +13,7 @@ Tools for collecting, storing, and reviewing Wellue SleepU oximeter data on a Ra
 Defaults are centralized in `sleep_monitoring/config.py`:
 - Database: `/home/ethermious/sleepu_logs/sleepu.db`
 - CSV backups: `/home/ethermious/sleepu_logs`
-- External BLE script: `/home/ethermious/repos/viatom-ble/viatom-ble.py`
+- External BLE script: `/home/ethermious/repos/sleep_monitoring/sleepu/ble/viatom-ble.py`
 - Time zone for `sleep_date` mapping: `America/Chicago`
 
 ## Sleep date mapping
@@ -25,7 +25,7 @@ All timestamps are stored in UTC and mapped to a `sleep_date` using local time:
 ```bash
 python -m sleep_monitoring.logger_service
 ```
-The service launches `viatom-ble.py -v -c`, appends rows to SQLite, and writes `sleepu_YYYYMMDD.csv` alongside the database.
+The service launches `viatom-ble.py -v -c`, appends rows to SQLite, and writes `sleepu_YYYYMMDD.csv` alongside the database. The logger will create `/home/ethermious/sleepu_logs` (or the configured paths) if missing; ensure the parent directory is writable by the service user to avoid "unable to open database file" errors.
 
 A sample systemd unit is provided at `systemd/sleep_monitoring_logger.service`. Update paths if needed, then install with:
 ```bash

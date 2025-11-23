@@ -30,6 +30,7 @@ class SleepLogger:
     @staticmethod
     def _ensure_environment() -> None:
         config.CSV_DIR.mkdir(parents=True, exist_ok=True)
+        config.DB_PATH.parent.mkdir(parents=True, exist_ok=True)
         data_io.init_db()
 
     def _open_csv(self, sleep_date: str) -> None:

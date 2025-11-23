@@ -10,10 +10,20 @@ from . import config
 
 
 def get_connection(db_path: Path | None = None) -> sqlite3.Connection:
-    """Return a SQLite connection with foreign keys enabled."""
-    path = db_path or config.DB_PATH
+    """Return a SQLite connection with foreign keys enabled.
+
+    This helper also ensures the parent directory exists and raises a clear error
+    if SQLite cannot open the file (commonly because the path is not writable).
+    """
+    path = Path(db_path) if db_path is not None else config.DB_PATH
     path.parent.mkdir(parents=True, exist_ok=True)
-    conn = sqlite3.connect(path)
+    try:
+        conn = sqlite3.connect(path)
+    except sqlite3.OperationalError as exc:  # pragma: no cover - defensive
+        raise sqlite3.OperationalError(
+            f"Unable to open database at {path}. Ensure the directory exists and is writable."
+        ) from exc
+
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON;")
     return conn
