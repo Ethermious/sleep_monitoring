@@ -2,7 +2,14 @@
 
 Tools for collecting, storing, and reviewing Wellue SleepU oximeter data on a Raspberry Pi.
 
-## Overview
+## Repository layout
+- `sleep_monitoring/`: primary Python package with the logger, data access helpers, metrics, and the Dash UI code.
+- `apps/`: Streamlit / Dash entry points for quick experimentation (`sleepu_clinic_app.py`, `sleepu_dashboard.py`).
+- `scripts/`: operational utilities (database migrations) and legacy one-off scripts (`scripts/legacy/sleepu_logger.py`).
+- `systemd/`: unit files for running the logger as a service.
+- `sleepu/`: vendor BLE script (`sleepu/ble/viatom-ble.py`) invoked by the logger.
+
+## Overview of key modules
 - `sleep_monitoring.logger_service`: systemd-friendly logger that streams verbose output from `viatom-ble.py`, stores samples in SQLite, and writes per-sleep-date CSV backups.
 - `sleep_monitoring.data_io`: database access helpers and the reusable `compute_sleep_date` rule.
 - `sleep_monitoring.metrics`: desaturation detection and summary metrics.
