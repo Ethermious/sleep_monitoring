@@ -9,6 +9,23 @@ from dash import Dash, Input, Output, dcc, html, dash_table
 
 from sleep_monitoring import config, data_io, metrics
 
+# Color palette for consistent grouping
+COLORS = {
+    # SpO2 family (green)
+    "spo2_raw": "#22c55e",       # SpO2 raw
+    "spo2_ma": "#16a34a",        # SpO2 moving average
+
+    # Heart rate family (blue)
+    "hr_raw": "#3b82f6",         # HR raw
+    "hr_ma": "#60a5fa",          # HR moving average
+
+    # HR family variant for threshold line
+    "spo2_threshold": "#c2d81d",   # HR related threshold line
+
+    # Event markers (desats, etc.)
+    "event_marker": "#f97316",   # orange, stands out
+}
+
 app = Dash(__name__)
 app.title = "Sleep Monitoring"
 server = app.server
@@ -365,6 +382,8 @@ def update_live(_, window_min, smoothing_sec, series, spo2_threshold):
                 name="SpO₂ (raw)",
                 mode="lines+markers",
                 opacity=0.4,
+                line=dict(color=COLORS["spo2_raw"]),
+                marker=dict(color=COLORS["spo2_raw"]),
             ),
             secondary_y=False,
         )
@@ -377,6 +396,8 @@ def update_live(_, window_min, smoothing_sec, series, spo2_threshold):
                 name="HR (raw)",
                 mode="lines+markers",
                 opacity=0.4,
+                line=dict(color=COLORS["hr_raw"]),
+                marker=dict(color=COLORS["hr_raw"]),
             ),
             secondary_y=True,
         )
@@ -395,6 +416,7 @@ def update_live(_, window_min, smoothing_sec, series, spo2_threshold):
                     y=spo2_ma,
                     name=f"SpO₂ {smoothing_sec}s MA",
                     mode="lines",
+                    line=dict(color=COLORS["spo2_ma"], width=2),
                 ),
                 secondary_y=False,
             )
@@ -406,6 +428,7 @@ def update_live(_, window_min, smoothing_sec, series, spo2_threshold):
                     y=hr_ma,
                     name=f"HR {smoothing_sec}s MA",
                     mode="lines",
+                    line=dict(color=COLORS["hr_ma"], width=2),
                 ),
                 secondary_y=True,
             )
@@ -414,7 +437,7 @@ def update_live(_, window_min, smoothing_sec, series, spo2_threshold):
     fig.add_hline(
         y=spo2_threshold,
         line_dash="dash",
-        line_color="red",
+        line_color=COLORS["spo2_threshold"],
         annotation_text=f"{spo2_threshold} % threshold",
         annotation_position="bottom right",
     )
@@ -523,6 +546,7 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
             name="SpO₂ (raw)",
             mode="lines",
             opacity=0.3,
+            line=dict(color=COLORS["spo2_raw"]),
         ),
         secondary_y=False,
     )
@@ -535,6 +559,7 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
                 name="HR (raw)",
                 mode="lines",
                 opacity=0.3,
+                line=dict(color=COLORS["hr_raw"]),
             ),
             secondary_y=True,
         )
@@ -547,6 +572,7 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
                 y=df["spo2_ma"],
                 name=f"SpO₂ {smoothing_sec}s MA",
                 mode="lines",
+                line=dict(color=COLORS["spo2_ma"], width=2),
             ),
             secondary_y=False,
         )
@@ -557,6 +583,7 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
                     y=df["hr_ma"],
                     name=f"HR {smoothing_sec}s MA",
                     mode="lines",
+                    line=dict(color=COLORS["hr_ma"], width=2),
                 ),
                 secondary_y=True,
             )
@@ -568,7 +595,11 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
                 x=desats["start_time_local"],
                 y=[threshold] * len(desats),
                 mode="markers",
-                marker=dict(color="red", size=10, symbol="triangle-down"),
+                marker=dict(
+                    color=COLORS["event_marker"],
+                    size=10,
+                    symbol="triangle-down",
+                ),
                 name="Desat start",
             ),
             secondary_y=False,
@@ -578,7 +609,7 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
     fig.add_hline(
         y=threshold,
         line_dash="dash",
-        line_color="red",
+        line_color=COLORS["spo2_threshold"],
         annotation_text=f"Threshold {threshold} %",
         annotation_position="bottom right",
     )
