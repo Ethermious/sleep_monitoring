@@ -116,6 +116,7 @@ def _live_layout() -> html.Div:
                     "scrollZoom": True,
                     "responsive": True,
                 },
+                style={"height": "650px"},
             ),
         ],
         className="tab-container",
@@ -134,31 +135,40 @@ def _review_layout() -> html.Div:
             # First row of controls
             html.Div(
                 [
-                    dcc.Dropdown(
-                        id="review-sleep-date",
-                        options=options,
-                        value=default_value,
-                        placeholder="Select sleep date",
-                        className="dropdown-dark",
+                    html.Div(
+                        dcc.Dropdown(
+                            id="review-sleep-date",
+                            options=options,
+                            value=default_value,
+                            placeholder="Select sleep date",
+                            className="dropdown-dark",
+                        ),
+                        className="review-control review-control--dropdown",
                     ),
-                    dcc.Input(
-                        id="review-threshold",
-                        type="number",
-                        value=90,
-                        step=1,
-                        min=50,
-                        max=100,
-                        placeholder="Desat threshold",
-                        className="input-dark",
+                    html.Div(
+                        dcc.Input(
+                            id="review-threshold",
+                            type="number",
+                            value=90,
+                            step=1,
+                            min=50,
+                            max=100,
+                            placeholder="Desat threshold",
+                            className="input-dark",
+                        ),
+                        className="review-control",
                     ),
-                    dcc.Input(
-                        id="review-duration",
-                        type="number",
-                        value=10,
-                        step=1,
-                        min=1,
-                        placeholder="Min duration (s)",
-                        className="input-dark",
+                    html.Div(
+                        dcc.Input(
+                            id="review-duration",
+                            type="number",
+                            value=10,
+                            step=1,
+                            min=1,
+                            placeholder="Min duration (s)",
+                            className="input-dark",
+                        ),
+                        className="review-control",
                     ),
                 ],
                 className="review-controls",
@@ -224,6 +234,7 @@ def _review_layout() -> html.Div:
                     "scrollZoom": True,
                     "responsive": True,
                 },
+                style={"height": "650px"},
             ),
 
             dash_table.DataTable(
@@ -413,13 +424,16 @@ def update_live(_, window_min, smoothing_sec, series, spo2_threshold):
         title=f"Live SpO₂ / HR - last {int(window_min)} min",
         template="plotly_dark",
         hovermode="x unified",
-        margin=dict(l=40, r=40, t=60, b=40),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        margin=dict(l=40, r=40, t=60, b=100),
+        legend=dict(
+            orientation="h", yanchor="top", y=-0.18, xanchor="left", x=0
+        ),
         paper_bgcolor="#020617",
         plot_bgcolor="#020617",
         font=dict(color="#e5e7eb"),
         # uirevision tells Plotly “don’t reset user zoom/pan on each update”
         uirevision="live",
+        height=650,
         xaxis=dict(
             type="date",
             # No range slider on LIVE view – just a moving window
@@ -574,8 +588,10 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
         template="plotly_dark",
         hovermode="x unified",
         # extra top margin so buttons don't sit on top of the plot
-        margin=dict(l=40, r=40, t=100, b=40),
-        legend=dict(orientation="h", yanchor="bottom", y=1.02, xanchor="left", x=0),
+        margin=dict(l=40, r=40, t=100, b=120),
+        legend=dict(
+            orientation="h", yanchor="top", y=-0.24, xanchor="left", x=0
+        ),
         paper_bgcolor="#020617",
         plot_bgcolor="#020617",
         font=dict(color="#e5e7eb"),
@@ -591,9 +607,13 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
                 # lift the buttons just above the plot area
                 y=1.05,
                 yanchor="bottom",
+                bgcolor="#0f172a",
+                activecolor="#1d4ed8",
+                font=dict(color="#e5e7eb", size=11),
             ),
             rangeslider=dict(visible=True),
         ),
+        height=650,
     )
 
     fig.update_yaxes(title_text="SpO₂ (%)", secondary_y=False, range=[70, 100])
