@@ -73,6 +73,10 @@ body {
   flex: 1 1 260px;
 }
 
+.review-control--dropdown {
+  flex: 2 1 320px;
+}
+
 .live-control--compact,
 .review-control--compact {
   max-width: 320px;
@@ -102,10 +106,32 @@ body {
 }
 
 /* Dropdown and input dark styles */
+.dropdown-dark {
+  min-width: 260px;
+  width: 100%;
+}
+
 .dropdown-dark .Select__control,
 .input-dark {
   background-color: #020617 !important;
   color: #e5e7eb !important;
+}
+
+/* Make Plotly modebar buttons legible on dark background */
+.modebar {
+  background-color: rgba(15, 23, 42, 0.9) !important;
+  border-radius: 10px !important;
+  padding: 4px !important;
+}
+
+.modebar-btn,
+.modebar-btn svg {
+  fill: #e5e7eb !important;
+  color: #e5e7eb !important;
+}
+
+.modebar-btn.active {
+  background-color: rgba(59, 130, 246, 0.35) !important;
 }
 
 /* DataTable tweaks are mostly done in Python style_* */
