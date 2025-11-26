@@ -437,6 +437,7 @@ def _events_layout() -> html.Div:
                         className="summary-card",
                         style={"marginTop": "12px"},
                     ),
+                    dcc.Store(id="events-selected-index", data=0),
                 ],
                 className="review-controls",
                 style={"marginBottom": "16px"},
@@ -1124,21 +1125,28 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
     [
         Output("events-index", "max"),
         Output("events-index", "marks"),
-        Output("events-index", "value"),
         Output("events-selected-summary", "children"),
         Output("events-graph", "figure"),
+        Output("events-selected-index", "data"),
     ],
     [
         Input("events-sleep-date", "value"),
         Input("events-threshold", "value"),
         Input("events-duration", "value"),
-        Input("events-index", "value"),
         Input("events-prev", "n_clicks"),
         Input("events-next", "n_clicks"),
+        Input("events-index", "value"),
     ],
+    State("events-selected-index", "data"),
 )
 def update_events_tab(
-    sleep_date_value, threshold, min_duration, event_index, prev_clicks, next_clicks
+    sleep_date_value,
+    threshold,
+    min_duration,
+    prev_clicks,
+    next_clicks,
+    slider_value,
+    stored_index,
 ):
     # Base empty figure
     def _empty_events_fig(title: str) -> go.Figure:
@@ -1156,9 +1164,9 @@ def update_events_tab(
         return (
             0,
             {0: "0"},
-            0,
             "No sleep date selected",
             _empty_events_fig("Select a sleep date"),
+            0,
         )
 
     sleep_date = datetime.fromisoformat(sleep_date_value).date()
@@ -1167,9 +1175,9 @@ def update_events_tab(
         return (
             0,
             {0: "0"},
-            0,
             "No data available",
             _empty_events_fig("No data for selected sleep date"),
+            0,
         )
 
     threshold = int(threshold) if threshold is not None else 90
@@ -1182,23 +1190,17 @@ def update_events_tab(
         return (
             0,
             {0: "0"},
-            0,
             "No events detected with current settings",
             _empty_events_fig("No desaturation events"),
+            0,
         )
 
     num_events = len(desats)
     max_idx = num_events - 1
 
-    # Current slider value
-    if event_index is None:
-        event_index = 0
-    if event_index < 0:
-        event_index = 0
-    if event_index > max_idx:
-        event_index = max_idx
+    # Determine current index based on which control fired
+    event_index = stored_index or 0
 
-    # Which control triggered (slider vs prev/next vs params change)
     ctx = dash.callback_context
     triggered_id = (
         ctx.triggered[0]["prop_id"].split(".")[0] if ctx.triggered else None
@@ -1208,7 +1210,15 @@ def update_events_tab(
         event_index = max(event_index - 1, 0)
     elif triggered_id == "events-next":
         event_index = min(event_index + 1, max_idx)
-    # If slider moved or params changed, we just trust the slider value
+    elif triggered_id == "events-index":
+        event_index = slider_value or 0
+    else:
+        event_index = 0
+
+    if event_index < 0:
+        event_index = 0
+    if event_index > max_idx:
+        event_index = max_idx
 
     # Slider marks: just first and last
     marks = {0: "0", max_idx: str(max_idx)} if max_idx > 0 else {0: "0"}
@@ -1336,7 +1346,12 @@ def update_events_tab(
 
     summary_children = html.Ul([html.Li(s) for s in summary_items])
 
-    return max_idx, marks, event_index, summary_children, fig
+    return max_idx, marks, summary_children, fig, event_index
+
+
+@app.callback(Output("events-index", "value"), Input("events-selected-index", "data"))
+def sync_slider_value(selected_index):
+    return selected_index or 0
 
 
 if __name__ == "__main__":
