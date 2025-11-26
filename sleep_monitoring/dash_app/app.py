@@ -6,7 +6,10 @@ from datetime import datetime, timedelta, timezone
 import dash
 import plotly.graph_objects as go
 from plotly.subplots import make_subplots
-from dash import Dash, Input, Output, dcc, html, dash_table
+from dash import Dash, Input, Output, State, dcc, html, dash_table
+from dash.exceptions import PreventUpdate
+
+
 
 from sleep_monitoring import config, data_io, metrics
 
@@ -350,33 +353,46 @@ def _events_layout() -> html.Div:
                         className="review-control review-control--dropdown",
                     ),
                     html.Div(
-                        dcc.Input(
-                            id="events-threshold",
-                            type="number",
-                            value=90,
-                            step=1,
-                            min=50,
-                            max=100,
-                            placeholder="Desat threshold",
-                            className="input-dark",
-                        ),
+                        [
+                            html.Label(
+                                "SpO₂ threshold (%)",
+                                className="control-label",
+                            ),
+                            dcc.Input(
+                                id="events-threshold",
+                                type="number",
+                                value=90,
+                                step=1,
+                                min=50,
+                                max=100,
+                                placeholder="Desat threshold",
+                                className="input-dark",
+                            ),
+                        ],
                         className="review-control",
                     ),
                     html.Div(
-                        dcc.Input(
-                            id="events-duration",
-                            type="number",
-                            value=10,
-                            step=1,
-                            min=1,
-                            placeholder="Min duration (s)",
-                            className="input-dark",
-                        ),
+                        [
+                            html.Label(
+                                "Min duration (s)",
+                                className="control-label",
+                            ),
+                            dcc.Input(
+                                id="events-duration",
+                                type="number",
+                                value=10,
+                                step=1,
+                                min=1,
+                                placeholder="Min duration (s)",
+                                className="input-dark",
+                            ),
+                        ],
                         className="review-control",
                     ),
                 ],
                 className="review-controls",
             ),
+
 
             # Slider + arrows to pick event index
             html.Div(
@@ -398,17 +414,19 @@ def _events_layout() -> html.Div:
                                     "cursor": "pointer",
                                 },
                             ),
-                            dcc.Slider(
-                                id="events-index",
-                                min=0,
-                                max=0,
-                                step=1,
-                                value=0,
-                                marks={0: "0"},
-                                tooltip={
-                                    "placement": "bottom",
-                                    "always_visible": True,
-                                },
+                            html.Div(
+                                dcc.Slider(
+                                    id="events-index",
+                                    min=0,
+                                    max=0,
+                                    step=1,
+                                    value=0,
+                                    marks={0: "0"},
+                                    tooltip={
+                                        "placement": "bottom",
+                                        "always_visible": True,
+                                    },
+                                ),
                                 style={"flex": 1},
                             ),
                             html.Button(
@@ -432,12 +450,14 @@ def _events_layout() -> html.Div:
                             "gap": "4px",
                         },
                     ),
+
                     html.Div(
                         id="events-selected-summary",
                         className="summary-card",
                         style={"marginTop": "12px"},
                     ),
-                    dcc.Store(id="events-selected-index", data=0),
+                    # Store removed: we'll drive everything directly from the slider
+
                 ],
                 className="review-controls",
                 style={"marginBottom": "16px"},
@@ -601,8 +621,9 @@ def update_live(_, window_min, smoothing_sec, series, spo2_threshold):
     if smoothing_sec and smoothing_sec > 0 and len(window_df) > 1:
         smoothing_sec = int(smoothing_sec)
         w = window_df.set_index("timestamp_utc")
-        spo2_ma = w["spo2"].rolling(f"{smoothing_sec}S").mean()
-        hr_ma = w["hr"].rolling(f"{smoothing_sec}S").mean()
+        spo2_ma = w["spo2"].rolling(f"{smoothing_sec}s").mean()
+        hr_ma = w["hr"].rolling(f"{smoothing_sec}s").mean()
+
 
         if "spo2" in (series or []):
             fig_overlay.add_trace(
@@ -819,8 +840,9 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
     # Rolling means if requested
     if smoothing_sec > 0 and len(df) > 1:
         w = df.set_index("timestamp_utc")
-        df["spo2_ma"] = w["spo2"].rolling(f"{smoothing_sec}S").mean().values
-        df["hr_ma"] = w["hr"].rolling(f"{smoothing_sec}S").mean().values
+        df["spo2_ma"] = w["spo2"].rolling(f"{smoothing_sec}s").mean().values
+        df["hr_ma"] = w["hr"].rolling(f"{smoothing_sec}s").mean().values
+
     else:
         df["spo2_ma"] = None
         df["hr_ma"] = None
@@ -1118,7 +1140,7 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
 
 
 # ---------------------------------------------------------------------------
-# EVENTS TAB CALLBACK
+# EVENTS TAB CALLBACK (basic version: slider only)
 # ---------------------------------------------------------------------------
 
 @app.callback(
@@ -1127,26 +1149,19 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
         Output("events-index", "marks"),
         Output("events-selected-summary", "children"),
         Output("events-graph", "figure"),
-        Output("events-selected-index", "data"),
     ],
     [
         Input("events-sleep-date", "value"),
         Input("events-threshold", "value"),
         Input("events-duration", "value"),
-        Input("events-prev", "n_clicks"),
-        Input("events-next", "n_clicks"),
         Input("events-index", "value"),
     ],
-    State("events-selected-index", "data"),
 )
 def update_events_tab(
     sleep_date_value,
     threshold,
     min_duration,
-    prev_clicks,
-    next_clicks,
     slider_value,
-    stored_index,
 ):
     # Base empty figure
     def _empty_events_fig(title: str) -> go.Figure:
@@ -1160,24 +1175,24 @@ def update_events_tab(
         )
         return f
 
+    # No date selected
     if not sleep_date_value:
         return (
             0,
             {0: "0"},
             "No sleep date selected",
             _empty_events_fig("Select a sleep date"),
-            0,
         )
 
     sleep_date = datetime.fromisoformat(sleep_date_value).date()
     df = data_io.load_session_samples(config.DEFAULT_USER_ID, sleep_date)
+
     if df.empty:
         return (
             0,
             {0: "0"},
             "No data available",
             _empty_events_fig("No data for selected sleep date"),
-            0,
         )
 
     threshold = int(threshold) if threshold is not None else 90
@@ -1192,46 +1207,34 @@ def update_events_tab(
             {0: "0"},
             "No events detected with current settings",
             _empty_events_fig("No desaturation events"),
-            0,
         )
 
     num_events = len(desats)
     max_idx = num_events - 1
 
-    # Determine current index based on which control fired
-    event_index = stored_index or 0
+    # Current index driven only by slider, default to 0
+    event_index = slider_value if slider_value is not None else 0
 
-    ctx = dash.callback_context
-    triggered_id = (
-        ctx.triggered[0]["prop_id"].split(".")[0] if ctx.triggered else None
-    )
-
-    if triggered_id == "events-prev":
-        event_index = max(event_index - 1, 0)
-    elif triggered_id == "events-next":
-        event_index = min(event_index + 1, max_idx)
-    elif triggered_id == "events-index":
-        event_index = slider_value or 0
-    else:
-        event_index = 0
-
+    # Clamp to valid range
     if event_index < 0:
         event_index = 0
     if event_index > max_idx:
         event_index = max_idx
 
-    # Slider marks: just first and last
+    # Slider marks: first and last
     marks = {0: "0", max_idx: str(max_idx)} if max_idx > 0 else {0: "0"}
 
     ev = desats.iloc[event_index]
 
-    # Time window for initial zoom: 10 s before start, to event end + 20 s
+    # Time window for initial zoom: 10 min before, 10 min after event start
     start_local = ev["start_time_local"]
     end_local = ev["end_time_local"]
-    duration_sec = ev.get("duration_sec", (end_local - start_local).total_seconds())
+    duration_sec = ev.get(
+        "duration_sec", (end_local - start_local).total_seconds()
+    )
 
-    window_start = start_local - timedelta(seconds=10)
-    window_end = end_local + timedelta(seconds=20)
+    window_start = start_local - timedelta(minutes=10)
+    window_end = start_local + timedelta(minutes=10)
 
     # Full-night stacked figure with rangeslider and event markers
     fig = make_subplots(
@@ -1322,7 +1325,6 @@ def update_events_tab(
         xaxis2=dict(
             type="date",
             rangeslider=dict(visible=True),
-            # Initial zoom centered around the event with a bit of padding
             range=[window_start, window_end],
         ),
     )
@@ -1339,19 +1341,54 @@ def update_events_tab(
         f"End (local): {end_local}",
         f"Duration: {duration_sec:.1f} s",
         f"Nadir SpO₂: {nadir_spo2}" if nadir_spo2 is not None else "Nadir SpO₂: n/a",
-        f"Mean SpO₂ during event: {mean_spo2}"
-        if mean_spo2 is not None
-        else "Mean SpO₂ during event: n/a",
+        (
+            f"Mean SpO₂ during event: {mean_spo2}"
+            if mean_spo2 is not None
+            else "Mean SpO₂ during event: n/a"
+        ),
     ]
 
     summary_children = html.Ul([html.Li(s) for s in summary_items])
 
-    return max_idx, marks, summary_children, fig, event_index
+    return max_idx, marks, summary_children, fig
+
+@app.callback(
+    Output("events-index", "value"),
+    [
+        Input("events-prev", "n_clicks"),
+        Input("events-next", "n_clicks"),
+    ],
+    [
+        State("events-index", "value"),
+        State("events-index", "max"),
+    ],
+)
+def step_events(prev_clicks, next_clicks, current_index, max_index):
+    # Only react when a button is actually clicked
+    ctx = dash.callback_context
+    if not ctx.triggered:
+        raise PreventUpdate
+
+    trigger = ctx.triggered[0]["prop_id"].split(".")[0]
+
+    # Default values
+    if current_index is None:
+        current_index = 0
+    if max_index is None:
+        max_index = 0
+
+    if trigger == "events-prev":
+        new_index = max(current_index - 1, 0)
+    elif trigger == "events-next":
+        new_index = min(current_index + 1, max_index)
+    else:
+        raise PreventUpdate
+
+    return new_index
 
 
-@app.callback(Output("events-index", "value"), Input("events-selected-index", "data"))
-def sync_slider_value(selected_index):
-    return selected_index or 0
+
+
 
 
 if __name__ == "__main__":
