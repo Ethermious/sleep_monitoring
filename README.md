@@ -3,7 +3,8 @@
 Tools for collecting, storing, and reviewing Wellue SleepU oximeter data on a Raspberry Pi.
 
 ## Repository layout
-- `sleep_monitoring/`: primary Python package with the logger, data access helpers, metrics, and the Dash UI code.
+- `sleep_monitoring/`: primary Python package with the logger, data access helpers, metrics, and modular Dash UI code.
+- `sleep_monitoring/dash_app/`: themed Dash dashboard split into layouts and callbacks for Live, Review, and Events tabs.
 - `apps/`: Streamlit / Dash entry points for quick experimentation (`sleepu_clinic_app.py`, `sleepu_dashboard.py`).
 - `scripts/`: operational utilities (database migrations) and legacy one-off scripts (`scripts/legacy/sleepu_logger.py`).
 - `systemd/`: unit files for running the logger as a service.
@@ -13,7 +14,7 @@ Tools for collecting, storing, and reviewing Wellue SleepU oximeter data on a Ra
 - `sleep_monitoring.logger_service`: systemd-friendly logger that streams verbose output from `viatom-ble.py`, stores samples in SQLite, and writes per-sleep-date CSV backups.
 - `sleep_monitoring.data_io`: database access helpers and the reusable `compute_sleep_date` rule.
 - `sleep_monitoring.metrics`: desaturation detection and summary metrics.
-- `sleep_monitoring.dash_app`: Dash UI with Live and Review tabs.
+- `sleep_monitoring.dash_app`: Dash UI composed of `theme.py`, `layouts.py`, tab-specific layout files, and callback modules.
 - `scripts/migrate_csv_to_db.py`: import existing CSV logs into SQLite.
 
 ## Paths and configuration
@@ -46,7 +47,11 @@ Run the Dash app for live monitoring and review:
 ```bash
 python -m sleep_monitoring.dash_app.app
 ```
-It exposes a Live tab for the current night and a Review tab for historical sessions.
+The dashboard uses a shared dark theme (`theme.py`) and modular structure:
+- `layouts.py` builds the page shell and tab routing.
+- `live_layout.py`, `review_layout.py`, `events_layout.py` describe each tab’s controls and graphs.
+- `live_callbacks.py`, `review_callbacks.py`, `events_callbacks.py` attach data-driven behavior.
+This separation keeps UI concerns clean while preserving the existing data contracts.
 
 ## Migrating historical CSV logs
 Import existing CSV files from the backup directory into SQLite:
