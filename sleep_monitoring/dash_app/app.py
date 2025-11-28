@@ -10,6 +10,7 @@ adjusting.
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import dash
 import plotly.graph_objects as go
@@ -52,169 +53,13 @@ COLORS = {
     "event_marker": "#f97316",   # orange, stands out
 }
 
-app = Dash(__name__)
+APP_ASSETS_PATH = Path(__file__).parent / "assets"
+
+app = Dash(__name__, assets_folder=str(APP_ASSETS_PATH))
 app.title = "Sleep Monitoring"
 server = app.server
 # Allow callbacks whose components only appear inside certain tabs
 app.config.suppress_callback_exceptions = True
-
-
-def _build_styles() -> html.Style:
-    """Return global styles for a consistent dark, spacious layout."""
-
-    return html.Style(
-        f"""
-        body {{
-            margin: 0;
-            background: {THEME['bg']};
-            color: {THEME['text']};
-            font-family: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif;
-        }}
-        .app-container {{
-            background: {THEME['bg']};
-            min-height: 100vh;
-        }}
-        .page-header {{
-            padding: 18px 24px 8px 24px;
-            border-bottom: 1px solid {THEME['border']};
-        }}
-        .page-title {{
-            font-size: 26px;
-            font-weight: 700;
-            margin: 0;
-            color: {THEME['text']};
-        }}
-        .page-subtitle {{
-            color: {THEME['muted']};
-            margin-top: 6px;
-            font-size: 14px;
-        }}
-        .tab-container {{
-            padding: 16px 22px 32px 22px;
-            max-width: 1400px;
-            margin: 0 auto;
-        }}
-        .tabs-container {{
-            padding: 0 16px;
-            position: sticky;
-            top: 0;
-            background: {THEME['bg']};
-            z-index: 20;
-        }}
-        .tab {{
-            background: {THEME['panel']};
-            color: {THEME['muted']};
-            border: none;
-            padding: 12px 18px;
-        }}
-        .tab--selected {{
-            color: {THEME['text']} !important;
-            font-weight: 600;
-            border-bottom: 3px solid {THEME['accent']};
-        }}
-        .live-metrics {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-            gap: 12px;
-            margin-bottom: 16px;
-        }}
-        .metric-card {{
-            background: {THEME['card']};
-            border: 1px solid {THEME['border']};
-            border-radius: 10px;
-            padding: 12px 14px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.25);
-        }}
-        .metric-label {{
-            color: {THEME['muted']};
-            font-size: 12px;
-            letter-spacing: 0.01em;
-        }}
-        .metric-value {{
-            font-size: 24px;
-            font-weight: 700;
-            margin-top: 6px;
-            color: {THEME['text']};
-        }}
-        .metric-help {{
-            color: {THEME['muted']};
-            font-size: 12px;
-            margin-top: 4px;
-        }}
-        .controls-panel {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
-            gap: 16px;
-            margin: 12px 0 20px 0;
-        }}
-        .control-block {{
-            background: {THEME['panel']};
-            border: 1px solid {THEME['border']};
-            border-radius: 10px;
-            padding: 12px 14px;
-        }}
-        .control-label {{
-            color: {THEME['text']};
-            font-weight: 600;
-            font-size: 14px;
-            display: block;
-            margin-bottom: 4px;
-        }}
-        .control-hint {{
-            color: {THEME['muted']};
-            font-size: 12px;
-            margin-bottom: 8px;
-        }}
-        .input-dark, .dropdown-dark .Select-control {{
-            background: {THEME['card']};
-            color: {THEME['text']};
-        }}
-        .summary-card {{
-            background: {THEME['card']};
-            border: 1px solid {THEME['border']};
-            border-radius: 10px;
-            padding: 14px 16px;
-            margin-bottom: 16px;
-            color: {THEME['text']};
-        }}
-        .summary-grid {{
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-            gap: 12px;
-        }}
-        .pill {{
-            display: inline-block;
-            padding: 4px 10px;
-            border-radius: 999px;
-            background: rgba(59,130,246,0.16);
-            color: {THEME['text']};
-            font-size: 12px;
-            border: 1px solid {THEME['border']};
-            margin-left: 6px;
-        }}
-        .section-title {{
-            font-size: 18px;
-            font-weight: 700;
-            margin: 6px 0 10px 0;
-        }}
-        .section-desc {{
-            color: {THEME['muted']};
-            margin-bottom: 12px;
-            font-size: 13px;
-        }}
-        button {{
-            background: {THEME['panel']};
-            border: 1px solid {THEME['border']};
-            color: {THEME['text']};
-            border-radius: 8px;
-        }}
-        .event-controls {{
-            display: flex;
-            flex-direction: column;
-            gap: 10px;
-        }}
-    """
-    )
 
 
 def _metric_card(target_id: str, title: str, helper: str) -> html.Div:
@@ -779,7 +624,6 @@ def _events_layout() -> html.Div:
 
 app.layout = html.Div(
     [
-        _build_styles(),
         html.Div(
             [
                 html.Div(
