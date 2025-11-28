@@ -1,7 +1,16 @@
-"""Dash UI for live monitoring and review."""
+"""Dash UI for live monitoring and review.
+
+This module keeps the data contracts with :mod:`sleep_monitoring.config`,
+:mod:`sleep_monitoring.data_io`, and :mod:`sleep_monitoring.metrics` while
+offering a clearer, more guided experience across Live, Review, and Events
+workflows. The layout favors a dark, high-contrast theme and descriptive
+controls so clinicians and lay users can quickly understand what they are
+adjusting.
+"""
 from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
+from pathlib import Path
 
 import dash
 import plotly.graph_objects as go
@@ -12,6 +21,20 @@ from dash.exceptions import PreventUpdate
 
 
 from sleep_monitoring import config, data_io, metrics
+
+
+# ---------------------------------------------------------------------------
+# VISUAL DESIGN
+# ---------------------------------------------------------------------------
+THEME = {
+    "bg": "#020617",
+    "panel": "#0b1224",
+    "card": "#0f172a",
+    "text": "#e5e7eb",
+    "muted": "#9ca3af",
+    "border": "#1f2937",
+    "accent": "#3b82f6",
+}
 
 # Color palette for consistent grouping
 COLORS = {
@@ -30,11 +53,41 @@ COLORS = {
     "event_marker": "#f97316",   # orange, stands out
 }
 
-app = Dash(__name__)
+APP_ASSETS_PATH = Path(__file__).parent / "assets"
+
+app = Dash(__name__, assets_folder=str(APP_ASSETS_PATH))
 app.title = "Sleep Monitoring"
 server = app.server
 # Allow callbacks whose components only appear inside certain tabs
 app.config.suppress_callback_exceptions = True
+
+
+def _metric_card(target_id: str, title: str, helper: str) -> html.Div:
+    """Reusable metric card with label, value placeholder, and helper text."""
+
+    return html.Div(
+        [
+            html.Div(title, className="metric-label"),
+            html.Div(id=target_id, className="metric-value"),
+            html.Div(helper, className="metric-help"),
+        ],
+        className="metric-card",
+    )
+
+
+def _format_timestamp_human(dt_value: datetime | None) -> str:
+    """Return a readable timestamp for end users (e.g., "Nov 27, 2025 · 06:42 AM")."""
+
+    if not isinstance(dt_value, datetime):
+        return "—"
+
+    return dt_value.strftime("%b %d, %Y · %I:%M %p")
+
+
+def _format_percentage(value: float | int | None, decimals: int = 2) -> str:
+    if value is None:
+        return "n/a"
+    return f"{value:.{decimals}f} %"
 
 
 # ---------------------------------------------------------------------------
@@ -46,13 +99,29 @@ def _live_layout() -> html.Div:
         [
             dcc.Interval(id="live-interval", interval=2000, n_intervals=0),
 
+            html.Div(
+                [
+                    html.H2("Live monitoring", className="section-title"),
+                    html.P(
+                        "Follow live SpO₂ and HR with a calm, stable view. "
+                        "Choose how much history to keep on screen and whether "
+                        "to smooth noisy signals.",
+                        className="section-desc",
+                    ),
+                ]
+            ),
+
             # Top metric strip
             html.Div(
                 [
-                    html.Div(id="live-spo2", className="metric"),
-                    html.Div(id="live-hr", className="metric"),
-                    html.Div(id="live-battery", className="metric"),
-                    html.Div(id="live-last-sample", className="metric"),
+                    _metric_card("live-spo2", "Current SpO₂", "Latest measured oxygen saturation."),
+                    _metric_card("live-hr", "Current heart rate", "Beats per minute from the latest sample."),
+                    _metric_card("live-battery", "Sensor battery", "Reported battery level from the device."),
+                    _metric_card(
+                        "live-last-sample",
+                        "Last received sample",
+                        "Time since the most recent data point arrived.",
+                    ),
                 ],
                 className="live-metrics",
             ),
@@ -62,7 +131,11 @@ def _live_layout() -> html.Div:
                 [
                     html.Div(
                         [
-                            html.Label("Window (min)", className="control-label"),
+                            html.Label("Display window", className="control-label"),
+                            html.Div(
+                                "How much recent data to keep visible (minutes).",
+                                className="control-hint",
+                            ),
                             dcc.Slider(
                                 id="live-window-min",
                                 min=10,
@@ -70,21 +143,23 @@ def _live_layout() -> html.Div:
                                 step=10,
                                 value=30,
                                 marks={
-                                    10: "10",
+                                    10: "10 min",
                                     30: "30",
                                     60: "60",
                                     120: "120",
                                     180: "180",
                                 },
+                                tooltip={"placement": "bottom"},
                             ),
                         ],
-                        className="live-control",
+                        className="control-block",
                     ),
                     html.Div(
                         [
-                            html.Label(
-                                "Smoothing (sec, moving average)",
-                                className="control-label",
+                            html.Label("Smoothing", className="control-label"),
+                            html.Div(
+                                "Optional moving average to reduce jitter. 0 turns smoothing off.",
+                                className="control-hint",
                             ),
                             dcc.Slider(
                                 id="live-smoothing-sec",
@@ -94,31 +169,38 @@ def _live_layout() -> html.Div:
                                 value=30,
                                 marks={
                                     0: "off",
-                                    15: "15",
+                                    15: "15 s",
                                     30: "30",
                                     60: "60",
                                     120: "120",
                                 },
+                                tooltip={"placement": "bottom"},
                             ),
                         ],
-                        className="live-control",
+                        className="control-block",
                     ),
                     html.Div(
                         [
-                            html.Label("Signals", className="control-label"),
+                            html.Label("Signals & alerting", className="control-label"),
+                            html.Div(
+                                "Pick which series to show and set the SpO₂ safety threshold.",
+                                className="control-hint",
+                            ),
                             dcc.Checklist(
                                 id="live-series",
                                 options=[
                                     {"label": "SpO₂", "value": "spo2"},
-                                    {"label": "HR", "value": "hr"},
+                                    {"label": "Heart rate", "value": "hr"},
                                 ],
                                 value=["spo2", "hr"],
                                 inline=True,
                                 inputStyle={"margin-right": "0.25rem"},
+                                labelStyle={"marginRight": "12px", "color": THEME["text"]},
                             ),
-                            html.Label(
-                                "SpO₂ threshold",
-                                className="control-label control-label--small",
+                            html.Label("SpO₂ alert threshold", className="control-label", style={"marginTop": "8px"}),
+                            html.Div(
+                                "Values below this line will be highlighted as potential desaturations.",
+                                className="control-hint",
                             ),
                             dcc.Slider(
                                 id="live-threshold",
@@ -126,16 +208,25 @@ def _live_layout() -> html.Div:
                                 max=95,
                                 step=1,
                                 value=90,
-                                marks={80: "80", 85: "85", 90: "90", 95: "95"},
+                                marks={80: "80%", 85: "85", 90: "90", 95: "95"},
+                                tooltip={"placement": "bottom"},
                             ),
                         ],
-                        className="live-control live-control--compact",
+                        className="control-block",
                     ),
                 ],
-                className="live-controls",
+                className="controls-panel",
             ),
 
-            # Main overlaid graph
+            html.Div(
+                [
+                    html.H3("Overlaid view", className="section-title"),
+                    html.P(
+                        "SpO₂ and HR share a common time axis for quick correlation. Hover to inspect precise values.",
+                        className="section-desc",
+                    ),
+                ]
+            ),
             dcc.Graph(
                 id="live-graph",
                 config={
@@ -143,10 +234,18 @@ def _live_layout() -> html.Div:
                     "scrollZoom": True,
                     "responsive": True,
                 },
-                style={"height": "650px"},
+                style={"height": "520px"},
             ),
 
-            # Two-row synced graph (SpO2 top, HR bottom)
+            html.Div(
+                [
+                    html.H3("Stacked view", className="section-title"),
+                    html.P(
+                        "Independent scales keep each signal legible while staying aligned in time.",
+                        className="section-desc",
+                    ),
+                ]
+            ),
             dcc.Graph(
                 id="live-graph-stacked",
                 config={
@@ -154,7 +253,7 @@ def _live_layout() -> html.Div:
                     "scrollZoom": True,
                     "responsive": True,
                 },
-                style={"height": "650px", "marginTop": "24px"},
+                style={"height": "520px"},
             ),
         ],
         className="tab-container",
@@ -170,61 +269,106 @@ def _review_layout() -> html.Div:
 
     return html.Div(
         [
-            # First row of controls
             html.Div(
                 [
-                    html.Div(
-                        dcc.Dropdown(
-                            id="review-sleep-date",
-                            options=options,
-                            value=default_value,
-                            placeholder="Select sleep date",
-                            className="dropdown-dark",
-                            style={
-                                "backgroundColor": "#020617",
-                                "color": "#e5e7eb",
-                            },
-                        ),
-                        className="review-control review-control--dropdown",
+                    html.H2("Nightly review", className="section-title"),
+                    html.P(
+                        "Browse recorded nights, review desaturation metrics, and zoom into periods of concern.",
+                        className="section-desc",
                     ),
-                    html.Div(
-                        dcc.Input(
-                            id="review-threshold",
-                            type="number",
-                            value=90,
-                            step=1,
-                            min=50,
-                            max=100,
-                            placeholder="Desat threshold",
-                            className="input-dark",
-                        ),
-                        className="review-control",
-                    ),
-                    html.Div(
-                        dcc.Input(
-                            id="review-duration",
-                            type="number",
-                            value=10,
-                            step=1,
-                            min=1,
-                            placeholder="Min duration (s)",
-                            className="input-dark",
-                        ),
-                        className="review-control",
-                    ),
-                ],
-                className="review-controls",
-                style={"position": "relative", "zIndex": 10},
+                ]
             ),
-
-            # Second row of controls
             html.Div(
                 [
                     html.Div(
                         [
-                            html.Label(
-                                "Smoothing (sec, moving average)",
-                                className="control-label",
+                            html.Label("Night to review", className="control-label"),
+                            html.Div(
+                                "Pick one sleep session. The newest night is pre-selected when available.",
+                                className="control-hint",
+                            ),
+                            dcc.Dropdown(
+                                id="review-sleep-date",
+                                options=options,
+                                value=default_value,
+                                placeholder="Select sleep date",
+                                className="dropdown-dark",
+                                style={
+                                    "backgroundColor": THEME["bg"],
+                                    "color": THEME["text"],
+                                },
+                            ),
+                        ],
+                        className="control-block",
+                    ),
+                    html.Div(
+                        [
+                            html.Label("Desaturation threshold (%)", className="control-label"),
+                            html.Div(
+                                "Values below this level count toward time below threshold and ODI.",
+                                className="control-hint",
+                            ),
+                            dcc.Input(
+                                id="review-threshold",
+                                type="number",
+                                value=90,
+                                step=1,
+                                min=50,
+                                max=100,
+                                placeholder="SpO₂ threshold",
+                                className="input-dark",
+                                style={"width": "100%", "padding": "10px"},
+                            ),
+                        ],
+                        className="control-block",
+                    ),
+                    html.Div(
+                        [
+                            html.Label("Minimum event duration (sec)", className="control-label"),
+                            html.Div(
+                                "Shortest SpO₂ drop to consider a desaturation event.",
+                                className="control-hint",
+                            ),
+                            dcc.Input(
+                                id="review-duration",
+                                type="number",
+                                value=10,
+                                step=1,
+                                min=1,
+                                placeholder="Minimum duration",
+                                className="input-dark",
+                                style={"width": "100%", "padding": "10px"},
+                            ),
+                        ],
+                        className="control-block",
+                    ),
+                    html.Div(
+                        [
+                            html.Label("Display options", className="control-label"),
+                            html.Div(
+                                "Toggle heart rate visibility and highlight detected events on the graphs.",
+                                className="control-hint",
+                            ),
+                            dcc.Checklist(
+                                id="review-options",
+                                options=[
+                                    {"label": "Show heart rate", "value": "hr"},
+                                    {"label": "Highlight desaturation events", "value": "events"},
+                                ],
+                                value=["hr", "events"],
+                                inline=False,
+                                inputStyle={"margin-right": "0.25rem"},
+                                labelStyle={"display": "block", "marginBottom": "6px", "color": THEME["text"]},
+                            ),
+                        ],
+                        className="control-block",
+                    ),
+                    html.Div(
+                        [
+                            html.Label("Signal smoothing", className="control-label"),
+                            html.Div(
+                                "Apply a moving average (seconds). Set to 0 to keep the raw traces only.",
+                                className="control-hint",
                             ),
                             dcc.Slider(
                                 id="review-smoothing-sec",
@@ -234,42 +378,31 @@ def _review_layout() -> html.Div:
                                 value=30,
                                 marks={
                                     0: "off",
-                                    15: "15",
+                                    15: "15 s",
                                     30: "30",
                                     60: "60",
                                     120: "120",
                                 },
+                                tooltip={"placement": "bottom"},
                             ),
                         ],
-                        className="review-control",
-                        style={"position": "relative", "zIndex": 10},
-                    ),
-                    html.Div(
-                        [
-                            html.Label(
-                                "Display options",
-                                className="control-label",
-                            ),
-                            dcc.Checklist(
-                                id="review-options",
-                                options=[
-                                    {"label": "Show HR", "value": "hr"},
-                                    {"label": "Highlight events", "value": "events"},
-                                ],
-                                value=["hr", "events"],
-                                inline=True,
-                                inputStyle={"margin-right": "0.25rem"},
-                            ),
-                        ],
-                        className="review-control review-control--compact",
+                        className="control-block",
                     ),
                 ],
-                className="review-controls",
+                className="controls-panel",
             ),
 
             html.Div(id="review-summary", className="summary-card"),
 
-            # Main overlaid graph
+            html.Div(
+                [
+                    html.H3("Overlaid overnight view", className="section-title"),
+                    html.P(
+                        "SpO₂ with optional heart rate shown on a shared time axis. Use the rangeslider to zoom.",
+                        className="section-desc",
+                    ),
+                ]
+            ),
             dcc.Graph(
                 id="review-graph",
                 config={
@@ -277,10 +410,18 @@ def _review_layout() -> html.Div:
                     "scrollZoom": True,
                     "responsive": True,
                 },
-                style={"height": "650px"},
+                style={"height": "520px"},
             ),
 
-            # Two-row synced graph
+            html.Div(
+                [
+                    html.H3("Stacked overnight view", className="section-title"),
+                    html.P(
+                        "Separate axes keep both signals clear while staying synchronized in time.",
+                        className="section-desc",
+                    ),
+                ]
+            ),
             dcc.Graph(
                 id="review-graph-stacked",
                 config={
@@ -288,36 +429,45 @@ def _review_layout() -> html.Div:
                     "scrollZoom": True,
                     "responsive": True,
                 },
-                style={"height": "650px", "marginTop": "24px"},
+                style={"height": "520px"},
             ),
 
+            html.Div(
+                [
+                    html.H3("Detected desaturation events", className="section-title"),
+                    html.P(
+                        "Each row marks a detected event using the current threshold and duration settings.",
+                        className="section-desc",
+                    ),
+                ]
+            ),
             dash_table.DataTable(
                 id="review-events",
                 columns=[
-                    {"name": "Start", "id": "start_time_local"},
-                    {"name": "End", "id": "end_time_local"},
+                    {"name": "Start (local)", "id": "start_time_local"},
+                    {"name": "End (local)", "id": "end_time_local"},
                     {"name": "Duration (s)", "id": "duration_sec"},
                     {"name": "Nadir SpO₂", "id": "nadir_spo2"},
                     {"name": "Mean SpO₂", "id": "mean_spo2"},
                 ],
                 style_header={
                     "backgroundColor": "#111827",
-                    "color": "#e5e7eb",
+                    "color": THEME["text"],
                     "border": "none",
                     "fontWeight": "600",
                 },
                 style_data={
-                    "backgroundColor": "#020617",
-                    "color": "#e5e7eb",
+                    "backgroundColor": THEME["bg"],
+                    "color": THEME["text"],
                     "border": "none",
                 },
                 style_table={
                     "overflowX": "auto",
-                    "backgroundColor": "#020617",
+                    "backgroundColor": THEME["bg"],
                 },
                 style_cell={
-                    "padding": "0.4rem",
-                    "fontSize": 12,
+                    "padding": "0.6rem",
+                    "fontSize": 13,
                 },
             ),
         ],
@@ -335,28 +485,44 @@ def _events_layout() -> html.Div:
 
     return html.Div(
         [
-            # Controls row
+            html.Div(
+                [
+                    html.H2("Event navigator", className="section-title"),
+                    html.P(
+                        "Step through each detected desaturation event with a focused context window and summary card.",
+                        className="section-desc",
+                    ),
+                ]
+            ),
             html.Div(
                 [
                     html.Div(
-                        dcc.Dropdown(
-                            id="events-sleep-date",
-                            options=options,
-                            value=default_value,
-                            placeholder="Select sleep date",
-                            className="dropdown-dark",
-                            style={
-                                "backgroundColor": "#020617",
-                                "color": "#e5e7eb",
-                            },
-                        ),
-                        className="review-control review-control--dropdown",
+                        [
+                            html.Label("Night to review", className="control-label"),
+                            html.Div(
+                                "Choose a recorded night before stepping through individual events.",
+                                className="control-hint",
+                            ),
+                            dcc.Dropdown(
+                                id="events-sleep-date",
+                                options=options,
+                                value=default_value,
+                                placeholder="Select sleep date",
+                                className="dropdown-dark",
+                                style={
+                                    "backgroundColor": THEME["bg"],
+                                    "color": THEME["text"],
+                                },
+                            ),
+                        ],
+                        className="control-block",
                     ),
                     html.Div(
                         [
-                            html.Label(
-                                "SpO₂ threshold (%)",
-                                className="control-label",
+                            html.Label("SpO₂ threshold (%)", className="control-label"),
+                            html.Div(
+                                "Events are detected when SpO₂ stays below this line for the minimum duration.",
+                                className="control-hint",
                             ),
                             dcc.Input(
                                 id="events-threshold",
@@ -367,15 +533,17 @@ def _events_layout() -> html.Div:
                                 max=100,
                                 placeholder="Desat threshold",
                                 className="input-dark",
+                                style={"width": "100%", "padding": "10px"},
                             ),
                         ],
-                        className="review-control",
+                        className="control-block",
                     ),
                     html.Div(
                         [
-                            html.Label(
-                                "Min duration (s)",
-                                className="control-label",
+                            html.Label("Minimum duration (sec)", className="control-label"),
+                            html.Div(
+                                "Ignore brief dips shorter than this duration.",
+                                className="control-hint",
                             ),
                             dcc.Input(
                                 id="events-duration",
@@ -385,34 +553,30 @@ def _events_layout() -> html.Div:
                                 min=1,
                                 placeholder="Min duration (s)",
                                 className="input-dark",
+                                style={"width": "100%", "padding": "10px"},
                             ),
                         ],
-                        className="review-control",
+                        className="control-block",
                     ),
                 ],
-                className="review-controls",
+                className="controls-panel",
             ),
 
-
-            # Slider + arrows to pick event index
             html.Div(
                 [
-                    html.Label("Event index", className="control-label"),
+                    html.Label("Event selector", className="control-label"),
+                    html.Div(
+                        "Use the arrow buttons for discrete navigation or drag the slider handle to jump to an index.",
+                        className="control-hint",
+                    ),
                     html.Div(
                         [
                             html.Button(
                                 "◀",
                                 id="events-prev",
                                 n_clicks=0,
-                                style={
-                                    "marginRight": "8px",
-                                    "padding": "4px 10px",
-                                    "backgroundColor": "#111827",
-                                    "color": "#e5e7eb",
-                                    "border": "1px solid #374151",
-                                    "borderRadius": "4px",
-                                    "cursor": "pointer",
-                                },
+                                style={"padding": "8px 12px", "fontSize": "16px"},
+                                title="Previous event",
                             ),
                             html.Div(
                                 dcc.Slider(
@@ -427,40 +591,31 @@ def _events_layout() -> html.Div:
                                         "always_visible": True,
                                     },
                                 ),
-                                style={"flex": 1},
+                                style={"flex": 1, "padding": "0 8px"},
                             ),
                             html.Button(
                                 "▶",
                                 id="events-next",
                                 n_clicks=0,
-                                style={
-                                    "marginLeft": "8px",
-                                    "padding": "4px 10px",
-                                    "backgroundColor": "#111827",
-                                    "color": "#e5e7eb",
-                                    "border": "1px solid #374151",
-                                    "borderRadius": "4px",
-                                    "cursor": "pointer",
-                                },
+                                style={"padding": "8px 12px", "fontSize": "16px"},
+                                title="Next event",
                             ),
                         ],
                         style={
                             "display": "flex",
                             "alignItems": "center",
-                            "gap": "4px",
+                            "gap": "8px",
                         },
                     ),
-
-                    html.Div(
-                        id="events-selected-summary",
-                        className="summary-card",
-                        style={"marginTop": "12px"},
-                    ),
-                    # Store removed: we'll drive everything directly from the slider
-
                 ],
-                className="review-controls",
-                style={"marginBottom": "16px"},
+                className="control-block",
+                style={"marginBottom": "12px"},
+            ),
+
+            html.Div(
+                id="events-selected-summary",
+                className="summary-card",
+                style={"marginBottom": "12px"},
             ),
 
             # Event-focused stacked graph (full night with zoom)
@@ -471,7 +626,7 @@ def _events_layout() -> html.Div:
                     "scrollZoom": True,
                     "responsive": True,
                 },
-                style={"height": "650px"},
+                style={"height": "520px"},
             ),
         ],
         className="tab-container",
@@ -484,38 +639,43 @@ def _events_layout() -> html.Div:
 
 app.layout = html.Div(
     [
-        dcc.Tabs(
-            id="tabs",
-            value="tab-live",
-            children=[
-                dcc.Tab(
-                    label="Live",
+        html.Div(
+            [
+                html.Div(
+                    [
+                        html.H1("Sleep monitoring dashboard", className="page-title"),
+                        html.Div(
+                            "Live bedside view, nightly reviews, and per-event investigation in one place.",
+                            className="page-subtitle",
+                        ),
+                    ],
+                    className="page-header",
+                ),
+                dcc.Tabs(
+                    id="tabs",
                     value="tab-live",
-                    className="tab",
-                    selected_className="tab--selected",
+                    children=[
+                        dcc.Tab(
+                            label="Live", value="tab-live", className="tab", selected_className="tab--selected"
+                        ),
+                        dcc.Tab(
+                            label="Review", value="tab-review", className="tab", selected_className="tab--selected"
+                        ),
+                        dcc.Tab(
+                            label="Events", value="tab-events", className="tab", selected_className="tab--selected"
+                        ),
+                    ],
+                    colors={
+                        "border": "#111827",
+                        "primary": "#3b82f6",
+                        "background": "#020617",
+                    },
+                    style={"borderBottom": "1px solid #111827"},
+                    className="tabs-container",
                 ),
-                dcc.Tab(
-                    label="Review",
-                    value="tab-review",
-                    className="tab",
-                    selected_className="tab--selected",
-                ),
-                dcc.Tab(
-                    label="Events",
-                    value="tab-events",
-                    className="tab",
-                    selected_className="tab--selected",
-                ),
-            ],
-            colors={
-                "border": "#111827",
-                "primary": "#3b82f6",
-                "background": "#020617",
-            },
-            style={"borderBottom": "1px solid #111827"},
-            className="tabs-container",
+                html.Div(id="tab-content"),
+            ]
         ),
-        html.Div(id="tab-content"),
     ],
     className="app-container",
 )
@@ -670,7 +830,7 @@ def update_live(_, window_min, smoothing_sec, series, spo2_threshold):
         plot_bgcolor="#020617",
         font=dict(color="#e5e7eb"),
         uirevision="live",
-        height=650,
+        height=520,
         xaxis=dict(
             type="date",
             rangeslider=dict(visible=False),
@@ -765,7 +925,7 @@ def update_live(_, window_min, smoothing_sec, series, spo2_threshold):
         plot_bgcolor="#020617",
         font=dict(color="#e5e7eb"),
         uirevision="live-stacked",
-        height=650,
+        height=520,
         xaxis=dict(
             type="date",
             rangeslider=dict(visible=False),
@@ -972,7 +1132,7 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
             ),
             rangeslider=dict(visible=True),
         ),
-        height=650,
+        height=520,
     )
 
     fig_overlay.update_yaxes(
@@ -1080,7 +1240,7 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
         paper_bgcolor="#020617",
         plot_bgcolor="#020617",
         font=dict(color="#e5e7eb"),
-        height=650,
+        height=520,
         xaxis2=dict(
             type="date",
             rangeslider=dict(visible=True),
@@ -1094,49 +1254,117 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
     spo2_mean = summary["spo2_mean"]
     hr_mean = summary["hr_mean"]
 
-    spo2_text = "SpO₂ min/mean: "
-    if summary["spo2_min"] is not None:
-        if spo2_mean is not None:
-            spo2_text += f"{summary['spo2_min']} / {spo2_mean:.1f}"
-        else:
-            spo2_text += f"{summary['spo2_min']} / n/a"
-    else:
-        spo2_text += "n/a"
+    cards = [
+        html.Div(
+            [
+                html.Div("Analysed duration", className="metric-label"),
+                html.Div(
+                    f"{summary['analysed_duration_hours']:.2f} h",
+                    className="metric-value",
+                ),
+                html.Div("Hours of data included in this review.", className="metric-help"),
+            ],
+            className="metric-card",
+        ),
+        html.Div(
+            [
+                html.Div("SpO₂ min / mean", className="metric-label"),
+                html.Div(
+                    "n/a"
+                    if summary["spo2_min"] is None
+                    else f"{summary['spo2_min']}% / {_format_percentage(spo2_mean)}",
+                    className="metric-value",
+                ),
+                html.Div("Lowest and average SpO₂ across the night.", className="metric-help"),
+            ],
+            className="metric-card",
+        ),
+        html.Div(
+            [
+                html.Div("HR min / mean", className="metric-label"),
+                html.Div(
+                    "n/a"
+                    if summary["hr_min"] is None
+                    else f"{summary['hr_min']} / {hr_mean:.1f}" if hr_mean is not None else f"{summary['hr_min']} / n/a",
+                    className="metric-value",
+                ),
+                html.Div("Heart rate range for the session.", className="metric-help"),
+            ],
+            className="metric-card",
+        ),
+        html.Div(
+            [
+                html.Div("Time below threshold", className="metric-label"),
+                html.Div(
+                    f"{summary['time_below_threshold_sec']:.1f} s",
+                    className="metric-value",
+                ),
+                html.Div("Seconds with SpO₂ below the chosen limit.", className="metric-help"),
+            ],
+            className="metric-card",
+        ),
+        html.Div(
+            [
+                html.Div("Events / ODI", className="metric-label"),
+                html.Div(
+                    f"{summary['events_count']} events · ODI {summary['odi']:.2f}",
+                    className="metric-value",
+                ),
+                html.Div("Number of desaturations and the Oxygen Desaturation Index.", className="metric-help"),
+            ],
+            className="metric-card",
+        ),
+        html.Div(
+            [
+                html.Div("Smoothing", className="metric-label"),
+                html.Div(
+                    "Off" if smoothing_sec <= 0 else f"{smoothing_sec} s moving average",
+                    className="metric-value",
+                ),
+                html.Div("Applies equally to SpO₂ and HR when enabled.", className="metric-help"),
+            ],
+            className="metric-card",
+        ),
+    ]
 
-    hr_text = "HR min/mean: "
-    if summary["hr_min"] is not None:
-        if hr_mean is not None:
-            hr_text += f"{summary['hr_min']} / {hr_mean:.1f}"
-        else:
-            hr_text += f"{summary['hr_min']} / n/a"
-    else:
-        hr_text += "n/a"
-
-    ma_text = (
-        "Moving average: off"
-        if smoothing_sec <= 0
-        else f"Moving average: {smoothing_sec} s"
-    )
-
-    summary_list = html.Ul(
+    summary_panel = html.Div(
         [
-            html.Li(
-                f"Analysed duration: {summary['analysed_duration_hours']:.2f} h"
+            html.Div(
+                [
+                    html.Div("Session overview", className="section-title"),
+                    html.Div(
+                        f"Threshold {threshold}% · Minimum duration {min_duration:.0f}s",
+                        className="section-desc",
+                    ),
+                ]
             ),
-            html.Li(spo2_text),
-            html.Li(hr_text),
-            html.Li(
-                "Time below threshold (s): "
-                f"{summary['time_below_threshold_sec']:.1f}"
-            ),
-            html.Li(f"Events: {summary['events_count']} (ODI {summary['odi']:.2f})"),
-            html.Li(ma_text),
-        ]
+            html.Div(cards, className="summary-grid"),
+        ],
+        className="summary-card",
     )
 
-    events_data = desats.to_dict("records") if not desats.empty else []
+    if not desats.empty:
+        formatted_events = desats.copy()
+        formatted_events["start_time_local"] = formatted_events["start_time_local"].apply(
+            _format_timestamp_human
+        )
+        formatted_events["end_time_local"] = formatted_events["end_time_local"].apply(
+            _format_timestamp_human
+        )
+        formatted_events["duration_sec"] = formatted_events["duration_sec"].map(
+            lambda v: f"{v:.1f} s"
+        )
+        formatted_events["nadir_spo2"] = formatted_events["nadir_spo2"].map(
+            lambda v: f"{v} %" if v is not None else "n/a"
+        )
+        formatted_events["mean_spo2"] = formatted_events["mean_spo2"].map(
+            _format_percentage
+        )
+        events_data = formatted_events.to_dict("records")
+    else:
+        events_data = []
 
-    return summary_list, fig_overlay, events_data, fig_stacked
+    return summary_panel, fig_overlay, events_data, fig_stacked
 
 
 # ---------------------------------------------------------------------------
@@ -1251,9 +1479,8 @@ def update_events_tab(
             x=df["timestamp_local"],
             y=df["spo2"],
             name="SpO₂",
-            mode="lines+markers",
+            mode="lines",
             line=dict(color=COLORS["spo2_raw"]),
-            marker=dict(color=COLORS["spo2_raw"]),
         ),
         row=1,
         col=1,
@@ -1292,9 +1519,8 @@ def update_events_tab(
                 x=df["timestamp_local"],
                 y=df["hr"],
                 name="HR",
-                mode="lines+markers",
+                mode="lines",
                 line=dict(color=COLORS["hr_raw"]),
-                marker=dict(color=COLORS["hr_raw"]),
             ),
             row=2,
             col=1,
@@ -1321,7 +1547,7 @@ def update_events_tab(
         paper_bgcolor="#020617",
         plot_bgcolor="#020617",
         font=dict(color="#e5e7eb"),
-        height=650,
+        height=520,
         xaxis2=dict(
             type="date",
             rangeslider=dict(visible=True),
@@ -1335,20 +1561,100 @@ def update_events_tab(
     nadir_spo2 = ev.get("nadir_spo2", None)
     mean_spo2 = ev.get("mean_spo2", None)
 
-    summary_items = [
-        f"Event {event_index + 1} of {num_events}",
-        f"Start (local): {start_local}",
-        f"End (local): {end_local}",
-        f"Duration: {duration_sec:.1f} s",
-        f"Nadir SpO₂: {nadir_spo2}" if nadir_spo2 is not None else "Nadir SpO₂: n/a",
-        (
-            f"Mean SpO₂ during event: {mean_spo2}"
-            if mean_spo2 is not None
-            else "Mean SpO₂ during event: n/a"
-        ),
-    ]
+    # Heart rate metrics within the selected event window
+    hr_min = None
+    hr_mean = None
+    if "hr" in df.columns:
+        event_slice = df[(df["timestamp_local"] >= start_local) & (df["timestamp_local"] <= end_local)]
+        if not event_slice.empty and event_slice["hr"].notna().any():
+            hr_min = int(event_slice["hr"].min())
+            hr_mean = float(event_slice["hr"].mean())
 
-    summary_children = html.Ul([html.Li(s) for s in summary_items])
+    summary_children = html.Div(
+        [
+            html.Div(
+                [
+                    html.Div(
+                        f"Event {event_index + 1} of {num_events}",
+                        className="section-title",
+                    ),
+                    html.Div(
+                        f"Context window: {window_start.strftime('%H:%M')}–{window_end.strftime('%H:%M')}",
+                        className="section-desc",
+                    ),
+                ]
+            ),
+            html.Div(
+                [
+                    html.Div(
+                        [
+                            html.Div("Start", className="metric-label"),
+                            html.Div(
+                                _format_timestamp_human(start_local), className="metric-value"
+                            ),
+                            html.Div("Local time when desaturation began.", className="metric-help"),
+                        ],
+                        className="metric-card",
+                    ),
+                    html.Div(
+                        [
+                            html.Div("End", className="metric-label"),
+                            html.Div(
+                                _format_timestamp_human(end_local), className="metric-value"
+                            ),
+                            html.Div("Local time when recovery finished.", className="metric-help"),
+                        ],
+                        className="metric-card",
+                    ),
+                    html.Div(
+                        [
+                            html.Div("Duration", className="metric-label"),
+                            html.Div(f"{duration_sec:.1f} s", className="metric-value"),
+                            html.Div("Length of time below threshold.", className="metric-help"),
+                        ],
+                        className="metric-card",
+                    ),
+                    html.Div(
+                        [
+                            html.Div("Nadir SpO₂", className="metric-label"),
+                            html.Div(
+                                "n/a" if nadir_spo2 is None else f"{nadir_spo2} %",
+                                className="metric-value",
+                            ),
+                            html.Div("Lowest saturation within the event.", className="metric-help"),
+                        ],
+                        className="metric-card",
+                    ),
+                    html.Div(
+                        [
+                            html.Div("Mean SpO₂", className="metric-label"),
+                            html.Div(
+                                _format_percentage(mean_spo2),
+                            className="metric-value",
+                            ),
+                            html.Div("Average saturation across the event window.", className="metric-help"),
+                        ],
+                        className="metric-card",
+                    ),
+                    html.Div(
+                        [
+                            html.Div("HR min / mean", className="metric-label"),
+                            html.Div(
+                                "n/a"
+                                if hr_min is None
+                                else f"{hr_min} bpm / {hr_mean:.1f} bpm" if hr_mean is not None else f"{hr_min} bpm / n/a",
+                                className="metric-value",
+                            ),
+                            html.Div("Heart rate profile during the desaturation.", className="metric-help"),
+                        ],
+                        className="metric-card",
+                    ),
+                ],
+                className="summary-grid",
+            ),
+        ],
+        className="summary-card",
+    )
 
     return max_idx, marks, summary_children, fig
 
