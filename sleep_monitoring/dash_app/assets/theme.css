@@ -123,6 +123,34 @@ body {
     color: #e5e7eb;
 }
 
+.dropdown-dark .Select-control,
+.dropdown-dark .Select-value,
+.dropdown-dark .Select-placeholder,
+.dropdown-dark .Select-input > input {
+    background-color: #0f172a !important;
+    color: #e5e7eb !important;
+    border: 1px solid #1f2937;
+}
+
+.dropdown-dark .Select-menu-outer,
+.dropdown-dark .Select-menu,
+.dropdown-dark .Select-menu-list {
+    background-color: #0b1224;
+    color: #e5e7eb;
+    border: 1px solid #1f2937;
+}
+
+.dropdown-dark .Select-option {
+    background-color: transparent;
+    color: #e5e7eb;
+}
+
+.dropdown-dark .Select-option.is-focused,
+.dropdown-dark .Select-option.is-selected {
+    background-color: rgba(59, 130, 246, 0.2);
+    color: #e5e7eb;
+}
+
 .summary-card {
     background: #0f172a;
     border: 1px solid #1f2937;

@@ -75,6 +75,21 @@ def _metric_card(target_id: str, title: str, helper: str) -> html.Div:
     )
 
 
+def _format_timestamp_human(dt_value: datetime | None) -> str:
+    """Return a readable timestamp for end users (e.g., "Nov 27, 2025 · 06:42 AM")."""
+
+    if not isinstance(dt_value, datetime):
+        return "—"
+
+    return dt_value.strftime("%b %d, %Y · %I:%M %p")
+
+
+def _format_percentage(value: float | int | None, decimals: int = 2) -> str:
+    if value is None:
+        return "n/a"
+    return f"{value:.{decimals}f} %"
+
+
 # ---------------------------------------------------------------------------
 # TAB LAYOUTS
 # ---------------------------------------------------------------------------
@@ -1257,7 +1272,7 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
                 html.Div(
                     "n/a"
                     if summary["spo2_min"] is None
-                    else f"{summary['spo2_min']} / {spo2_mean:.1f}" if spo2_mean is not None else f"{summary['spo2_min']} / n/a",
+                    else f"{summary['spo2_min']}% / {_format_percentage(spo2_mean)}",
                     className="metric-value",
                 ),
                 html.Div("Lowest and average SpO₂ across the night.", className="metric-help"),
@@ -1328,7 +1343,26 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
         className="summary-card",
     )
 
-    events_data = desats.to_dict("records") if not desats.empty else []
+    if not desats.empty:
+        formatted_events = desats.copy()
+        formatted_events["start_time_local"] = formatted_events["start_time_local"].apply(
+            _format_timestamp_human
+        )
+        formatted_events["end_time_local"] = formatted_events["end_time_local"].apply(
+            _format_timestamp_human
+        )
+        formatted_events["duration_sec"] = formatted_events["duration_sec"].map(
+            lambda v: f"{v:.1f} s"
+        )
+        formatted_events["nadir_spo2"] = formatted_events["nadir_spo2"].map(
+            lambda v: f"{v} %" if v is not None else "n/a"
+        )
+        formatted_events["mean_spo2"] = formatted_events["mean_spo2"].map(
+            _format_percentage
+        )
+        events_data = formatted_events.to_dict("records")
+    else:
+        events_data = []
 
     return summary_panel, fig_overlay, events_data, fig_stacked
 
@@ -1445,9 +1479,8 @@ def update_events_tab(
             x=df["timestamp_local"],
             y=df["spo2"],
             name="SpO₂",
-            mode="lines+markers",
+            mode="lines",
             line=dict(color=COLORS["spo2_raw"]),
-            marker=dict(color=COLORS["spo2_raw"]),
         ),
         row=1,
         col=1,
@@ -1486,9 +1519,8 @@ def update_events_tab(
                 x=df["timestamp_local"],
                 y=df["hr"],
                 name="HR",
-                mode="lines+markers",
+                mode="lines",
                 line=dict(color=COLORS["hr_raw"]),
-                marker=dict(color=COLORS["hr_raw"]),
             ),
             row=2,
             col=1,
@@ -1529,6 +1561,15 @@ def update_events_tab(
     nadir_spo2 = ev.get("nadir_spo2", None)
     mean_spo2 = ev.get("mean_spo2", None)
 
+    # Heart rate metrics within the selected event window
+    hr_min = None
+    hr_mean = None
+    if "hr" in df.columns:
+        event_slice = df[(df["timestamp_local"] >= start_local) & (df["timestamp_local"] <= end_local)]
+        if not event_slice.empty and event_slice["hr"].notna().any():
+            hr_min = int(event_slice["hr"].min())
+            hr_mean = float(event_slice["hr"].mean())
+
     summary_children = html.Div(
         [
             html.Div(
@@ -1548,7 +1589,9 @@ def update_events_tab(
                     html.Div(
                         [
                             html.Div("Start", className="metric-label"),
-                            html.Div(str(start_local), className="metric-value"),
+                            html.Div(
+                                _format_timestamp_human(start_local), className="metric-value"
+                            ),
                             html.Div("Local time when desaturation began.", className="metric-help"),
                         ],
                         className="metric-card",
@@ -1556,7 +1599,9 @@ def update_events_tab(
                     html.Div(
                         [
                             html.Div("End", className="metric-label"),
-                            html.Div(str(end_local), className="metric-value"),
+                            html.Div(
+                                _format_timestamp_human(end_local), className="metric-value"
+                            ),
                             html.Div("Local time when recovery finished.", className="metric-help"),
                         ],
                         className="metric-card",
@@ -1573,7 +1618,7 @@ def update_events_tab(
                         [
                             html.Div("Nadir SpO₂", className="metric-label"),
                             html.Div(
-                                "n/a" if nadir_spo2 is None else str(nadir_spo2),
+                                "n/a" if nadir_spo2 is None else f"{nadir_spo2} %",
                                 className="metric-value",
                             ),
                             html.Div("Lowest saturation within the event.", className="metric-help"),
@@ -1584,10 +1629,23 @@ def update_events_tab(
                         [
                             html.Div("Mean SpO₂", className="metric-label"),
                             html.Div(
-                                "n/a" if mean_spo2 is None else str(mean_spo2),
-                                className="metric-value",
+                                _format_percentage(mean_spo2),
+                            className="metric-value",
                             ),
                             html.Div("Average saturation across the event window.", className="metric-help"),
+                        ],
+                        className="metric-card",
+                    ),
+                    html.Div(
+                        [
+                            html.Div("HR min / mean", className="metric-label"),
+                            html.Div(
+                                "n/a"
+                                if hr_min is None
+                                else f"{hr_min} bpm / {hr_mean:.1f} bpm" if hr_mean is not None else f"{hr_min} bpm / n/a",
+                                className="metric-value",
+                            ),
+                            html.Div("Heart rate profile during the desaturation.", className="metric-help"),
                         ],
                         className="metric-card",
                     ),
