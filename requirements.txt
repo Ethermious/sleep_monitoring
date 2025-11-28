@@ -23,7 +23,6 @@ pytz==2025.2
 requests==2.32.5
 retrying==1.4.2
 six==1.17.0
--e git+ssh://git@github.com/Ethermious/sleep_monitoring.git@67cd1ee7e5135d8017132ef1b4e4cd19fd69ab64#egg=sleep_monitoring
 typing_extensions==4.15.0
 tzdata==2025.2
 urllib3==2.5.0
