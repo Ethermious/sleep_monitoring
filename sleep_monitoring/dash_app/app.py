@@ -11,6 +11,7 @@ from __future__ import annotations
 
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
+from statistics import median
 
 import dash
 import plotly.graph_objects as go
@@ -76,18 +77,63 @@ def _metric_card(target_id: str, title: str, helper: str) -> html.Div:
 
 
 def _format_timestamp_human(dt_value: datetime | None) -> str:
-    """Return a readable timestamp for end users (e.g., "Nov 27, 2025 · 06:42:13 AM")."""
+    """Return a readable timestamp for end users (e.g., "Nov 27, 2025 · 06:42 AM")."""
 
     if not isinstance(dt_value, datetime):
         return "—"
 
-    return dt_value.strftime("%b %d, %Y · %I:%M:%S %p")
+    return dt_value.strftime("%b %d, %Y · %I:%M %p")
 
 
 def _format_percentage(value: float | int | None, decimals: int = 2) -> str:
     if value is None:
         return "n/a"
     return f"{value:.{decimals}f} %"
+
+
+def _apply_gap_breaks(
+    x_series, y_series, max_gap_seconds: float | None = None
+) -> tuple[list, list]:
+    """Insert break markers when gaps exceed a threshold so lines do not connect.
+
+    Parameters
+    ----------
+    x_series : Sequence[datetime]
+        Datetime values used for the x-axis.
+    y_series : Sequence
+        Corresponding y values.
+    max_gap_seconds : float | None
+        Optional override for what counts as a gap. If omitted, use three times
+        the median sampling interval, with a floor of 60 seconds to avoid
+        spurious breaks from jittery clocks.
+    """
+
+    x_list = list(x_series)
+    y_list = list(y_series)
+
+    if len(x_list) < 2:
+        return x_list, y_list
+
+    deltas = [
+        (x_list[i] - x_list[i - 1]).total_seconds()
+        for i in range(1, len(x_list))
+    ]
+
+    typical_spacing = median(deltas)
+    gap_threshold = max_gap_seconds or max(typical_spacing * 3, 60)
+
+    new_x = [x_list[0]]
+    new_y = [y_list[0]]
+
+    for i in range(1, len(x_list)):
+        if deltas[i - 1] > gap_threshold:
+            # Break the line before continuing with the next real point.
+            new_x.append(x_list[i - 1])
+            new_y.append(None)
+        new_x.append(x_list[i])
+        new_y.append(y_list[i])
+
+    return new_x, new_y
 
 
 # ---------------------------------------------------------------------------
@@ -746,12 +792,17 @@ def update_live(_, window_min, smoothing_sec, series, spo2_threshold):
     # Overlaid figure (existing behavior)
     fig_overlay = make_subplots(specs=[[{"secondary_y": True}]])
 
+    spo2_x, spo2_y = _apply_gap_breaks(
+        window_df["timestamp_local"], window_df["spo2"]
+    )
+    hr_x, hr_y = _apply_gap_breaks(window_df["timestamp_local"], window_df["hr"])
+
     # Raw signals (dimmed)
     if "spo2" in (series or []):
         fig_overlay.add_trace(
             go.Scatter(
-                x=window_df["timestamp_local"],
-                y=window_df["spo2"],
+                x=spo2_x,
+                y=spo2_y,
                 name="SpO₂ (raw)",
                 mode="lines+markers",
                 opacity=0.4,
@@ -764,8 +815,8 @@ def update_live(_, window_min, smoothing_sec, series, spo2_threshold):
     if "hr" in (series or []):
         fig_overlay.add_trace(
             go.Scatter(
-                x=window_df["timestamp_local"],
-                y=window_df["hr"],
+                x=hr_x,
+                y=hr_y,
                 name="HR (raw)",
                 mode="lines+markers",
                 opacity=0.4,
@@ -778,18 +829,23 @@ def update_live(_, window_min, smoothing_sec, series, spo2_threshold):
     # Moving average smoothing
     spo2_ma = None
     hr_ma = None
+    spo2_ma_x = spo2_ma_y = hr_ma_x = hr_ma_y = None
     if smoothing_sec and smoothing_sec > 0 and len(window_df) > 1:
         smoothing_sec = int(smoothing_sec)
         w = window_df.set_index("timestamp_utc")
         spo2_ma = w["spo2"].rolling(f"{smoothing_sec}s").mean()
         hr_ma = w["hr"].rolling(f"{smoothing_sec}s").mean()
 
+        spo2_ma_x, spo2_ma_y = _apply_gap_breaks(
+            window_df["timestamp_local"], spo2_ma
+        )
+        hr_ma_x, hr_ma_y = _apply_gap_breaks(window_df["timestamp_local"], hr_ma)
 
         if "spo2" in (series or []):
             fig_overlay.add_trace(
                 go.Scatter(
-                    x=window_df["timestamp_local"],
-                    y=spo2_ma,
+                    x=spo2_ma_x,
+                    y=spo2_ma_y,
                     name=f"SpO₂ {smoothing_sec}s MA",
                     mode="lines",
                     line=dict(color=COLORS["spo2_ma"], width=2),
@@ -800,8 +856,8 @@ def update_live(_, window_min, smoothing_sec, series, spo2_threshold):
         if "hr" in (series or []):
             fig_overlay.add_trace(
                 go.Scatter(
-                    x=window_df["timestamp_local"],
-                    y=hr_ma,
+                    x=hr_ma_x,
+                    y=hr_ma_y,
                     name=f"HR {smoothing_sec}s MA",
                     mode="lines",
                     line=dict(color=COLORS["hr_ma"], width=2),
@@ -852,8 +908,8 @@ def update_live(_, window_min, smoothing_sec, series, spo2_threshold):
     if "spo2" in (series or []):
         fig_stacked.add_trace(
             go.Scatter(
-                x=window_df["timestamp_local"],
-                y=window_df["spo2"],
+                x=spo2_x,
+                y=spo2_y,
                 name="SpO₂ (raw)",
                 mode="lines+markers",
                 opacity=0.4,
@@ -866,8 +922,8 @@ def update_live(_, window_min, smoothing_sec, series, spo2_threshold):
         if spo2_ma is not None:
             fig_stacked.add_trace(
                 go.Scatter(
-                    x=window_df["timestamp_local"],
-                    y=spo2_ma,
+                    x=spo2_ma_x,
+                    y=spo2_ma_y,
                     name=f"SpO₂ {smoothing_sec}s MA",
                     mode="lines",
                     line=dict(color=COLORS["spo2_ma"], width=2),
@@ -889,8 +945,8 @@ def update_live(_, window_min, smoothing_sec, series, spo2_threshold):
     if "hr" in (series or []):
         fig_stacked.add_trace(
             go.Scatter(
-                x=window_df["timestamp_local"],
-                y=window_df["hr"],
+                x=hr_x,
+                y=hr_y,
                 name="HR (raw)",
                 mode="lines+markers",
                 opacity=0.4,
@@ -903,8 +959,8 @@ def update_live(_, window_min, smoothing_sec, series, spo2_threshold):
         if hr_ma is not None:
             fig_stacked.add_trace(
                 go.Scatter(
-                    x=window_df["timestamp_local"],
-                    y=hr_ma,
+                    x=hr_ma_x,
+                    y=hr_ma_y,
                     name=f"HR {smoothing_sec}s MA",
                     mode="lines",
                     line=dict(color=COLORS["hr_ma"], width=2),
@@ -997,15 +1053,24 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
 
     df = df.sort_values("timestamp_utc")
 
+    spo2_x, spo2_y = _apply_gap_breaks(df["timestamp_local"], df["spo2"])
+    hr_x, hr_y = _apply_gap_breaks(df["timestamp_local"], df["hr"])
+
     # Rolling means if requested
     if smoothing_sec > 0 and len(df) > 1:
         w = df.set_index("timestamp_utc")
         df["spo2_ma"] = w["spo2"].rolling(f"{smoothing_sec}s").mean().values
         df["hr_ma"] = w["hr"].rolling(f"{smoothing_sec}s").mean().values
 
+        spo2_ma_x, spo2_ma_y = _apply_gap_breaks(
+            df["timestamp_local"], df["spo2_ma"]
+        )
+        hr_ma_x, hr_ma_y = _apply_gap_breaks(df["timestamp_local"], df["hr_ma"])
+
     else:
         df["spo2_ma"] = None
         df["hr_ma"] = None
+        spo2_ma_x = spo2_ma_y = hr_ma_x = hr_ma_y = None
 
     desats = metrics.compute_desaturations(df, threshold, min_duration)
     summary = metrics.summarize_session(df, threshold, min_duration)
@@ -1016,8 +1081,8 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
     # Raw traces
     fig_overlay.add_trace(
         go.Scatter(
-            x=df["timestamp_local"],
-            y=df["spo2"],
+            x=spo2_x,
+            y=spo2_y,
             name="SpO₂ (raw)",
             mode="lines",
             opacity=0.3,
@@ -1029,8 +1094,8 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
     if show_hr:
         fig_overlay.add_trace(
             go.Scatter(
-                x=df["timestamp_local"],
-                y=df["hr"],
+                x=hr_x,
+                y=hr_y,
                 name="HR (raw)",
                 mode="lines",
                 opacity=0.3,
@@ -1043,8 +1108,8 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
     if smoothing_sec > 0:
         fig_overlay.add_trace(
             go.Scatter(
-                x=df["timestamp_local"],
-                y=df["spo2_ma"],
+                x=spo2_ma_x,
+                y=spo2_ma_y,
                 name=f"SpO₂ {smoothing_sec}s MA",
                 mode="lines",
                 line=dict(color=COLORS["spo2_ma"], width=2),
@@ -1054,8 +1119,8 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
         if show_hr:
             fig_overlay.add_trace(
                 go.Scatter(
-                    x=df["timestamp_local"],
-                    y=df["hr_ma"],
+                    x=hr_ma_x,
+                    y=hr_ma_y,
                     name=f"HR {smoothing_sec}s MA",
                     mode="lines",
                     line=dict(color=COLORS["hr_ma"], width=2),
@@ -1152,8 +1217,8 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
     # Row 1: SpO2
     fig_stacked.add_trace(
         go.Scatter(
-            x=df["timestamp_local"],
-            y=df["spo2"],
+            x=spo2_x,
+            y=spo2_y,
             name="SpO₂ (raw)",
             mode="lines",
             opacity=0.3,
@@ -1165,8 +1230,8 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
     if smoothing_sec > 0:
         fig_stacked.add_trace(
             go.Scatter(
-                x=df["timestamp_local"],
-                y=df["spo2_ma"],
+                x=spo2_ma_x,
+                y=spo2_ma_y,
                 name=f"SpO₂ {smoothing_sec}s MA",
                 mode="lines",
                 line=dict(color=COLORS["spo2_ma"], width=2),
@@ -1206,8 +1271,8 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
     if show_hr:
         fig_stacked.add_trace(
             go.Scatter(
-                x=df["timestamp_local"],
-                y=df["hr"],
+                x=hr_x,
+                y=hr_y,
                 name="HR (raw)",
                 mode="lines",
                 opacity=0.3,
@@ -1219,8 +1284,8 @@ def update_review(sleep_date_value, threshold, min_duration, smoothing_sec, opti
         if smoothing_sec > 0:
             fig_stacked.add_trace(
                 go.Scatter(
-                    x=df["timestamp_local"],
-                    y=df["hr_ma"],
+                    x=hr_ma_x,
+                    y=hr_ma_y,
                     name=f"HR {smoothing_sec}s MA",
                     mode="lines",
                     line=dict(color=COLORS["hr_ma"], width=2),
@@ -1427,6 +1492,8 @@ def update_events_tab(
     min_duration = float(min_duration) if min_duration is not None else 10.0
 
     df = df.sort_values("timestamp_utc")
+    spo2_x, spo2_y = _apply_gap_breaks(df["timestamp_local"], df["spo2"])
+    hr_x, hr_y = _apply_gap_breaks(df["timestamp_local"], df.get("hr", []))
     desats = metrics.compute_desaturations(df, threshold, min_duration)
 
     if desats.empty:
@@ -1476,8 +1543,8 @@ def update_events_tab(
     # Row 1: SpO2 full session
     fig.add_trace(
         go.Scatter(
-            x=df["timestamp_local"],
-            y=df["spo2"],
+            x=spo2_x,
+            y=spo2_y,
             name="SpO₂",
             mode="lines",
             line=dict(color=COLORS["spo2_raw"]),
@@ -1516,8 +1583,8 @@ def update_events_tab(
     if "hr" in df.columns:
         fig.add_trace(
             go.Scatter(
-                x=df["timestamp_local"],
-                y=df["hr"],
+                x=hr_x,
+                y=hr_y,
                 name="HR",
                 mode="lines",
                 line=dict(color=COLORS["hr_raw"]),
