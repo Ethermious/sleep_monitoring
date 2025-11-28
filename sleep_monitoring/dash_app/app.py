@@ -59,11 +59,6 @@ server = app.server
 app.config.suppress_callback_exceptions = True
 
 
-def _build_styles() -> html.Link:
-    """Serve global styles from the assets folder via a single link tag."""
-
-    return html.Link(rel="stylesheet", href="/assets/theme.css")
-
 def _metric_card(target_id: str, title: str, helper: str) -> html.Div:
     """Reusable metric card with label, value placeholder, and helper text."""
 
@@ -626,7 +621,6 @@ def _events_layout() -> html.Div:
 
 app.layout = html.Div(
     [
-        _build_styles(),
         html.Div(
             [
                 html.Div(
