@@ -77,13 +77,12 @@ def _metric_card(target_id: str, title: str, helper: str) -> html.Div:
 
 
 def _format_timestamp_human(dt_value: datetime | None) -> str:
-    """Return a readable timestamp for end users (e.g., "Nov 27, 2025 · 06:42 AM")."""
+    """Return a readable timestamp for end users (e.g., "Nov 27, 2025 · 06:42:13 AM")."""
 
     if not isinstance(dt_value, datetime):
         return "—"
 
-    return dt_value.strftime("%b %d, %Y · %I:%M %p")
-
+    return dt_value.strftime("%b %d, %Y · %I:%M:%S %p")
 
 def _format_percentage(value: float | int | None, decimals: int = 2) -> str:
     if value is None:
