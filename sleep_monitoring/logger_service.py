@@ -94,7 +94,7 @@ class SleepLogger:
 
     def run(self) -> None:
         """Launch the BLE process and process its output."""
-        cmd = ["sudo", str(sys.executable), str(config.VIATOM_BLE_PATH), "-v", "-c"]
+        cmd = [str(sys.executable), str(config.VIATOM_BLE_PATH), "-v", "-c"]
         print(f"[logger] Starting BLE process: {' '.join(cmd)}")
         with subprocess.Popen(
             cmd,

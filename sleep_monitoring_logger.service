@@ -1,29 +1,25 @@
 [Unit]
 Description=Sleep Monitoring Logger
-After=network-online.target bluetooth.target
-Wants=network-online.target
+After=network-online.target bluetooth.service
+Wants=network-online.target bluetooth.service
 
 [Service]
 Type=simple
 
-# Run as your normal user so HOME and permissions are correct
-User=ethermious
-Group=ethermious
+# Run as root so BLE + bluetooth reset work cleanly
+User=root
+Group=root
 
-# Where the repo lives
 WorkingDirectory=/home/ethermious/repos/sleep_monitoring
 
-# Environment (optional but handy)
 Environment="PYTHONUNBUFFERED=1"
 Environment="SLEEPU_DB_PATH=/home/ethermious/sleepu_logs/sleepu.db"
 
-# Use the venv Python that you used manually
 ExecStart=/home/ethermious/repos/sleep_monitoring/venv/bin/python -m sleep_monitoring.logger_service
 
 # Automatically restart on failure
-Restart=on-failure
+Restart=always
 RestartSec=5
 
 [Install]
 WantedBy=multi-user.target
-
