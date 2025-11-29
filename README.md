@@ -18,10 +18,10 @@ Tools for collecting, storing, and reviewing Wellue SleepU oximeter data on a Ra
 - `scripts/migrate_csv_to_db.py`: import existing CSV logs into SQLite.
 
 ## Paths and configuration
-Defaults are centralized in `sleep_monitoring/config.py`:
-- Database: `/home/ethermious/sleepu_logs/sleepu.db`
-- CSV backups: `/home/ethermious/sleepu_logs`
-- External BLE script: `/home/ethermious/repos/sleep_monitoring/sleepu/ble/viatom-ble.py`
+Defaults are centralized in `sleep_monitoring/config.py` and can be overridden with environment variables to match your setup:
+- Database: ``$SLEEPU_DB_PATH`` (default: `~/sleepu_logs/sleepu.db`)
+- CSV backups: ``$SLEEPU_CSV_DIR`` (default: the database directory)
+- External BLE script: ``$SLEEPU_VIATOM_BLE_PATH`` (default: `sleepu/ble/viatom-ble.py` relative to the repo)
 - Time zone for `sleep_date` mapping: `America/Chicago`
 
 ## Sleep date mapping
