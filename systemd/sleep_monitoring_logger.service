@@ -16,6 +16,8 @@ WorkingDirectory=/home/ethermious/repos/sleep_monitoring
 # Environment (optional but handy)
 Environment="PYTHONUNBUFFERED=1"
 Environment="SLEEPU_DB_PATH=/home/ethermious/sleepu_logs/sleepu.db"
+Environment="SLEEPU_CSV_DIR=/home/ethermious/sleepu_logs"
+Environment="SLEEPU_VIATOM_BLE_PATH=/home/ethermious/repos/sleep_monitoring/sleepu/ble/viatom-ble.py"
 
 # Use the venv Python that you used manually
 ExecStart=/home/ethermious/repos/sleep_monitoring/venv/bin/python -m sleep_monitoring.logger_service
