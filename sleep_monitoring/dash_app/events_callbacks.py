@@ -19,6 +19,9 @@ def register_events_callbacks(app):
         [
             Output("events-index", "max"),
             Output("events-index", "marks"),
+            Output("events-current", "children"),
+            Output("events-count", "children"),
+            Output("events-window", "children"),
             Output("events-selected-summary", "children"),
             Output("events-graph", "figure"),
         ],
@@ -31,13 +34,29 @@ def register_events_callbacks(app):
     )
     def update_events_tab(sleep_date_value, threshold, min_duration, slider_value):
         if not sleep_date_value:
-            return (0, {0: "0"}, "No sleep date selected", empty_figure("Select a sleep date"))
+            return (
+                0,
+                {0: "0"},
+                "—",
+                "—",
+                "—",
+                "No sleep date selected",
+                empty_figure("Select a sleep date"),
+            )
 
         sleep_date = datetime.fromisoformat(sleep_date_value).date()
         df = data_io.load_session_samples(config.DEFAULT_USER_ID, sleep_date)
 
         if df.empty:
-            return (0, {0: "0"}, "No data available", empty_figure("No data for selected sleep date"))
+            return (
+                0,
+                {0: "0"},
+                "—",
+                "0 events",
+                "—",
+                "No data available",
+                empty_figure("No data for selected sleep date"),
+            )
 
         threshold = int(threshold) if threshold is not None else 90
         min_duration = float(min_duration) if min_duration is not None else 10.0
@@ -51,6 +70,9 @@ def register_events_callbacks(app):
             return (
                 0,
                 {0: "0"},
+                "0 of 0",
+                "0 events",
+                "—",
                 "No events detected with current settings",
                 empty_figure("No desaturation events"),
             )
@@ -224,7 +246,15 @@ def register_events_callbacks(app):
             className="summary-card",
         )
 
-        return max_idx, marks, summary_children, fig
+        return (
+            max_idx,
+            marks,
+            f"{event_index + 1} of {num_events}",
+            f"{num_events} events",
+            f"{window_start.strftime('%H:%M')}–{window_end.strftime('%H:%M')}",
+            summary_children,
+            fig,
+        )
 
     @app.callback(
         Output("events-index", "value"),
