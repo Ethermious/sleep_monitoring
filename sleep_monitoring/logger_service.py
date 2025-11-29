@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import csv
+import logging
 import re
 import subprocess
 import sys
@@ -10,6 +11,8 @@ from pathlib import Path
 from typing import Optional
 
 from . import config, data_io
+
+LOGGER = logging.getLogger(__name__)
 
 VERBOSE_LINE = re.compile(
     r"SpO2:\s*(?P<spo2>\d+)%\s+HR:\s*(?P<hr>\d+)\s*bpm\s*PI:\s*(?P<pi>\d+)\s*Movement:\s*(?P<movement>\d+)\s*Battery:\s*(?P<battery>\d+)",
@@ -20,11 +23,12 @@ VERBOSE_LINE = re.compile(
 class SleepLogger:
     """Capture BLE output and persist to SQLite and CSV backup files."""
 
-    def __init__(self):
+    def __init__(self, logger: logging.Logger | None = None):
         self.current_sleep_date: Optional[str] = None
         self.csv_file: Optional[Path] = None
         self.csv_handle = None
         self.csv_writer: Optional[csv.writer] = None
+        self.logger = logger or LOGGER
         self._ensure_environment()
 
     @staticmethod
@@ -44,6 +48,7 @@ class SleepLogger:
             self.csv_writer.writerow(["timestamp_utc", "spo2", "hr", "pi", "movement", "battery"])
         self.current_sleep_date = sleep_date
         self.csv_file = filename
+        self.logger.info("Opened CSV log %s for sleep date %s", filename, sleep_date)
 
     def _write_csv_row(self, timestamp: datetime, values: dict) -> None:
         if self.csv_writer is None:
@@ -63,7 +68,7 @@ class SleepLogger:
     def _process_line(self, line: str) -> None:
         match = VERBOSE_LINE.search(line)
         if not match:
-            print(f"[logger] Ignoring line: {line.strip()}")
+            self.logger.debug("Ignoring line: %s", line.strip())
             return
 
         values = {k: int(v) for k, v in match.groupdict().items()}
@@ -87,15 +92,19 @@ class SleepLogger:
         )
 
         self._write_csv_row(now_utc, values)
-        print(
-            f"[logger] {now_utc.isoformat()} sleep_date={sleep_date} "
-            f"SpO2={values['spo2']} HR={values['hr']} PI={values['pi']}"
+        self.logger.info(
+            "%s sleep_date=%s SpO2=%s HR=%s PI=%s",
+            now_utc.isoformat(),
+            sleep_date,
+            values["spo2"],
+            values["hr"],
+            values["pi"],
         )
 
     def run(self) -> None:
         """Launch the BLE process and process its output."""
         cmd = [str(sys.executable), str(config.VIATOM_BLE_PATH), "-v", "-c"]
-        print(f"[logger] Starting BLE process: {' '.join(cmd)}")
+        self.logger.info("Starting BLE process: %s", " ".join(cmd))
         with subprocess.Popen(
             cmd,
             stdout=subprocess.PIPE,
@@ -110,7 +119,7 @@ class SleepLogger:
                         break
                     self._process_line(line)
             except KeyboardInterrupt:
-                print("[logger] Received interrupt, shutting down.")
+                self.logger.info("Received interrupt, shutting down.")
             finally:
                 proc.terminate()
                 if self.csv_handle:
@@ -118,8 +127,10 @@ class SleepLogger:
 
 
 def main() -> None:
-    logger = SleepLogger()
-    logger.run()
+    logging.basicConfig(
+        level=logging.INFO, format="%(asctime)s [%(levelname)s] %(name)s: %(message)s"
+    )
+    SleepLogger().run()
 
 
 if __name__ == "__main__":
